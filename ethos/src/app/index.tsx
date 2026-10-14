@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -15,7 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { API_BASE_URL } from '../config';
 import { Theme } from '../theme';
-import { AppState, CharacterType, LogEntry, MoodType, TabType } from '../types';
+import { AppState, CharacterType, LevelUpEvent, LogEntry, MoodType, StatName, TabType } from '../types';
 import { HeaderBar } from '../components/HeaderBar';
 import { HeroStatsSection } from '../components/HeroStatsSection';
 import { SleekJournalInput } from '../components/SleekJournalInput';
@@ -23,6 +23,8 @@ import { ProgressScreen } from '../components/ProgressScreen';
 import { ChroniclesScreen } from '../components/ChroniclesScreen';
 import { HeroScreen } from '../components/HeroScreen';
 import { FloatingDock } from '../components/FloatingDock';
+import { applyXp, deriveState, STAT_NAMES } from '../game';
+import { loadLocalState, resetLocalState, saveLocalState } from '../storage';
 
 export default function HomeScreen() {
   const [state, setState] = useState<AppState | null>(null);
@@ -66,84 +68,135 @@ export default function HomeScreen() {
     };
   }, []);
 
+  // ── Load Local State on Launch ───────────────────────────────────────
+  useEffect(() => {
+    async function init() {
+      try {
+        const local = await loadLocalState();
+        setState(local);
+        const todayLog = local.logs.find((l) => l.day === local.currentDay);
+        setLastResult(todayLog ?? null);
+
+        if (todayLog?.mood) {
+          setSelectedMood(todayLog.mood as MoodType);
+        } else if (local.currentMood) {
+          setSelectedMood(local.currentMood as MoodType);
+        } else {
+          setSelectedMood(null);
+        }
+      } catch (err: any) {
+        console.error('Failed to load local state:', err);
+        setError('Could not load local data from device storage.');
+      }
+    }
+    init();
+  }, []);
+
   // Check if current day has already been evaluated
   const dayLogged = state
     ? state.logs.some((l) => l.day === state.currentDay)
     : false;
 
-  // ── Fetch Server State ────────────────────────────────────────────────
-  const fetchState = useCallback(async () => {
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/state`);
-      if (!res.ok) throw new Error(`Server returned HTTP ${res.status}`);
-      const data: AppState = await res.json();
-      setState(data);
-      setError(null);
-
-      // Restore today's log & mood if already exists
-      const todayLog = data.logs.find((l) => l.day === data.currentDay);
-      setLastResult(todayLog ?? null);
-
-      if (todayLog?.mood) {
-        setSelectedMood(todayLog.mood as MoodType);
-      } else if (data.currentMood) {
-        setSelectedMood(data.currentMood as MoodType);
-      } else {
-        setSelectedMood(null);
-      }
-    } catch {
-      setError(`Cannot connect to server at ${API_BASE_URL}.\nEnsure backend is running and your PC & phone are on the same Wi-Fi.`);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchState();
-  }, [fetchState]);
-
-  // ── Mood Selection ───────────────────────────────────────────────────
+  // ── Mood Selection (Local storage persistence) ───────────────────────
   const handleSelectMood = async (mood: MoodType) => {
     setSelectedMood(mood);
     if (!state) return;
 
-    // Optimistically update
-    setState((prev) => (prev ? { ...prev, currentMood: mood } : null));
+    const nextMoods = { ...(state.moods || {}), [state.currentDay]: mood };
+    const nextLogs = state.logs.map((l) => (l.day === state.currentDay ? { ...l, mood } : l));
 
+    const nextState = deriveState({
+      ...state,
+      currentMood: mood,
+      moods: nextMoods,
+      logs: nextLogs,
+    });
+
+    setState(nextState);
     try {
-      const res = await fetch(`${API_BASE_URL}/api/mood`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mood }),
-      });
-      if (res.ok) {
-        const updated: AppState = await res.json();
-        setState(updated);
-      }
+      await saveLocalState(nextState);
     } catch (err) {
-      console.warn('Could not save mood to server:', err);
+      console.warn('Could not persist mood to local storage:', err);
     }
   };
 
-  // ── Evaluate Day Chronicle ───────────────────────────────────────────
+  // ── Evaluate Day Chronicle (Stateless Gemini evaluation + Client XP math) ──
   const handleEvaluate = async () => {
     if (!text.trim() || loading || !state) return;
     setLoading(true);
     setError(null);
 
     try {
-      const res = await fetch(`${API_BASE_URL}/api/log`, {
+      const res = await fetch(`${API_BASE_URL}/api/evaluate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           text: text.trim(),
-          mood: selectedMood || null,
         }),
       });
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || `Evaluation failed with status ${res.status}`);
+      if (!res.ok) {
+        throw new Error(data.error || `Evaluation service error (${res.status})`);
+      }
 
-      setState(data.state);
-      setLastResult(data.log);
+      if (!data.scores || typeof data.scores !== 'object') {
+        throw new Error('Invalid response structure received from evaluation service.');
+      }
+
+      // ── Client-Side XP Math ──
+      const scores = data.scores as Record<StatName, number>;
+      const updatedStats = { ...state.stats };
+      const xpChanges: Record<StatName, number> = {
+        health: 0,
+        intelligence: 0,
+        mental_health: 0,
+        strength: 0,
+      };
+      const allLevelUps: LevelUpEvent[] = [];
+
+      for (const stat of STAT_NAMES) {
+        const cur = updatedStats[stat] || { level: 1, xp: 0 };
+        const scoreVal = typeof scores[stat] === 'number' ? scores[stat] : 0;
+        const result = applyXp(stat, cur.level, cur.xp, scoreVal);
+
+        updatedStats[stat] = {
+          level: result.level,
+          xp: result.xp,
+        };
+        xpChanges[stat] = result.xpChange;
+        allLevelUps.push(...result.levelUps);
+      }
+
+      const dayMood = selectedMood || state.moods?.[state.currentDay] || null;
+      const nextMoods = { ...(state.moods || {}) };
+      if (dayMood) {
+        nextMoods[state.currentDay] = dayMood;
+      }
+
+      const logEntry: LogEntry = {
+        day: state.currentDay,
+        text: text.trim(),
+        mood: dayMood,
+        scores,
+        xpChanges,
+        levelUps: allLevelUps,
+        createdAt: new Date().toISOString(),
+      };
+
+      const nextState = deriveState({
+        ...state,
+        stats: updatedStats,
+        logs: [...state.logs, logEntry],
+        moods: nextMoods,
+        currentMood: dayMood,
+      });
+
+      // Save to local device storage
+      await saveLocalState(nextState);
+
+      setState(nextState);
+      setLastResult(logEntry);
       setText('');
       Keyboard.dismiss();
     } catch (err: unknown) {
@@ -154,15 +207,20 @@ export default function HomeScreen() {
     }
   };
 
-  // ── Advance to Next Day ──────────────────────────────────────────────
+  // ── Advance to Next Day (100% Local) ──────────────────────────────────
   const handleNextDay = async () => {
+    if (!state) return;
     setError(null);
     try {
-      const res = await fetch(`${API_BASE_URL}/api/next-day`, { method: 'POST' });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || `Failed to advance day`);
+      const nextDay = state.currentDay + 1;
+      const nextState = deriveState({
+        ...state,
+        currentDay: nextDay,
+        currentMood: null,
+      });
 
-      setState(data);
+      await saveLocalState(nextState);
+      setState(nextState);
       setLastResult(null);
       setText('');
       setSelectedMood(null);
@@ -172,11 +230,11 @@ export default function HomeScreen() {
     }
   };
 
-  // ── Reset All Data ───────────────────────────────────────────────────
+  // ── Reset All Local Data ─────────────────────────────────────────────
   const handleReset = () => {
     Alert.alert(
       'Reset All Progress?',
-      'This will wipe all stat levels, XP, mood archives, and chronicle history back to Day 1.',
+      'This will wipe all stat levels, XP, mood archives, and chronicle history back to Day 1 on this phone.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -184,17 +242,15 @@ export default function HomeScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              const res = await fetch(`${API_BASE_URL}/api/reset`, { method: 'POST' });
-              const data = await res.json();
-              if (!res.ok) throw new Error(data.error);
-              setState(data);
+              const fresh = await resetLocalState();
+              setState(fresh);
               setLastResult(null);
               setText('');
               setSelectedMood(null);
               setError(null);
               setCurrentTab('today');
             } catch {
-              setError('Failed to reset server data.');
+              setError('Failed to reset local data.');
             }
           },
         },
@@ -202,28 +258,13 @@ export default function HomeScreen() {
     );
   };
 
-  // ── Loading & Initial Error Views ────────────────────────────────────
+  // ── Loading View ─────────────────────────────────────────────────────
   if (!state) {
     return (
       <SafeAreaView style={styles.safe}>
         <View style={styles.centerContainer}>
-          {error ? (
-            <View style={styles.initErrorCard}>
-              <View style={styles.initErrorIcon}>
-                <Ionicons name="cloud-offline" size={32} color={Theme.colors.roseDark} />
-              </View>
-              <Text style={styles.initErrorTitle}>Connection Lost</Text>
-              <Text style={styles.initErrorText}>{error}</Text>
-              <TouchableOpacity style={styles.retryButton} onPress={fetchState}>
-                <Text style={styles.retryButtonText}>Retry Connection</Text>
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color={Theme.colors.purple} />
-              <Text style={styles.loadingText}>Awakening Ethos...</Text>
-            </View>
-          )}
+          <ActivityIndicator size="large" color={Theme.colors.purple} />
+          <Text style={styles.loadingText}>Awakening Ethos...</Text>
         </View>
       </SafeAreaView>
     );
@@ -252,11 +293,10 @@ export default function HomeScreen() {
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="on-drag"
           >
-            {/* 1. Header (No user logo on top left) */}
+            {/* 1. Header */}
             <HeaderBar day={state.currentDay} />
 
             {/* 2. Hero + Stacked Stats Section */}
-            {/* (Character big and on the LEFT going offscreen, 4 stats stacked on RIGHT, no hero label or level) */}
             <HeroStatsSection
               character={character}
               stats={state.stats}
@@ -299,11 +339,23 @@ export default function HomeScreen() {
             onSelectCharacter={setCharacter}
             onReset={handleReset}
             apiBaseUrl={API_BASE_URL}
+            onImportState={(restored) => {
+              setState(restored);
+              const todayLog = restored.logs.find((l) => l.day === restored.currentDay);
+              setLastResult(todayLog ?? null);
+              if (todayLog?.mood) {
+                setSelectedMood(todayLog.mood as MoodType);
+              } else if (restored.currentMood) {
+                setSelectedMood(restored.currentMood as MoodType);
+              } else {
+                setSelectedMood(null);
+              }
+            }}
           />
         )}
       </KeyboardAvoidingView>
 
-      {/* 4. Animated Minimalist Floating Dock (hidden when typing so it never obscures the input box) */}
+      {/* 4. Animated Minimalist Floating Dock (hidden when typing) */}
       {!isKeyboardVisible && (
         <FloatingDock currentTab={currentTab} onSelectTab={setCurrentTab} />
       )}
@@ -340,49 +392,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     color: Theme.colors.textSecondary,
-  },
-  initErrorCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: Theme.radii.xl,
-    padding: 26,
-    alignItems: 'center',
-    maxWidth: 340,
-    borderWidth: 1,
-    borderColor: Theme.colors.border,
-    ...Theme.shadows.card,
-  },
-  initErrorIcon: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: Theme.colors.roseLight,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 16,
-  },
-  initErrorTitle: {
-    fontSize: 18,
-    fontWeight: '900',
-    color: Theme.colors.textPrimary,
-    marginBottom: 8,
-  },
-  initErrorText: {
-    fontSize: 13,
-    color: Theme.colors.textSecondary,
-    textAlign: 'center',
-    lineHeight: 20,
-    marginBottom: 20,
-  },
-  retryButton: {
-    backgroundColor: Theme.colors.dockBg,
-    borderRadius: Theme.radii.full,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    ...Theme.shadows.card,
-  },
-  retryButtonText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '800',
+    marginTop: 12,
   },
 });

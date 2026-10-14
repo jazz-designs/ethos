@@ -21,7 +21,7 @@ export interface LogEntry {
   scores: Record<StatName, number>;
   xpChanges: Record<StatName, number>;
   levelUps: LevelUpEvent[];
-  summary: string;
+  summary?: string;
   createdAt: string;
 }
 

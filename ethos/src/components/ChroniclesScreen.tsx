@@ -102,10 +102,12 @@ export const ChroniclesScreen: React.FC<ChroniclesScreenProps> = ({ logs }) => {
                   </View>
                 </View>
 
-                {/* Summary */}
-                <Text style={styles.summaryText} numberOfLines={isExpanded ? undefined : 2}>
-                  "{log.summary}"
-                </Text>
+                {/* Journal Entry Preview (User's input) */}
+                {!isExpanded && (
+                  <Text style={styles.summaryText} numberOfLines={2}>
+                    "{log.text}"
+                  </Text>
+                )}
 
                 {/* Scores Row */}
                 <View style={styles.scoresRow}>

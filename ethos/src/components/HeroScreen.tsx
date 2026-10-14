@@ -1,10 +1,24 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import React, { useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  Share,
+  Modal,
+  TextInput,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
+import * as Clipboard from 'expo-clipboard';
 import { Theme } from '../theme';
 import { AppState, CharacterType, StatName } from '../types';
-import { CHARACTER_IMAGES, STAT_IMAGES } from '../assets';
+import { CHARACTER_IMAGES } from '../assets';
+import { createBackupJson, restoreBackupJson } from '../storage';
 
 interface HeroScreenProps {
   state: AppState;
@@ -12,6 +26,7 @@ interface HeroScreenProps {
   onSelectCharacter: (char: CharacterType) => void;
   onReset: () => void;
   apiBaseUrl: string;
+  onImportState: (newState: AppState) => void;
 }
 
 const CHARACTERS: { id: CharacterType; name: string }[] = [
@@ -27,8 +42,13 @@ export const HeroScreen: React.FC<HeroScreenProps> = ({
   onSelectCharacter,
   onReset,
   apiBaseUrl,
+  onImportState,
 }) => {
   const { characterLevel, stats, logs } = state;
+
+  const [isImportModalVisible, setIsImportModalVisible] = useState(false);
+  const [importText, setImportText] = useState('');
+  const [importError, setImportError] = useState<string | null>(null);
 
   const totalXp = Object.values(stats).reduce((acc, s) => acc + s.xp, 0);
 
@@ -106,6 +126,68 @@ export const HeroScreen: React.FC<HeroScreenProps> = ({
     },
   ];
 
+  // ── Export Handlers ──────────────────────────────────────────────────
+  const handleExportShare = async () => {
+    try {
+      const json = createBackupJson(state);
+      await Share.share({
+        title: `Ethos_Backup_Day${state.currentDay}.json`,
+        message: json,
+      });
+    } catch (err: any) {
+      Alert.alert('Export Notice', err.message || 'Could not trigger share sheet.');
+    }
+  };
+
+  const handleExportCopy = async () => {
+    try {
+      const json = createBackupJson(state);
+      await Clipboard.setStringAsync(json);
+      Alert.alert(
+        'Backup Copied to Clipboard',
+        'Your entire journal archive, levels, and stats have been copied. Save this text in your Notes or send it to yourself for backup.'
+      );
+    } catch (err: any) {
+      Alert.alert('Copy Error', err.message || 'Could not copy to clipboard.');
+    }
+  };
+
+  // ── Import Handlers ──────────────────────────────────────────────────
+  const handlePasteFromClipboard = async () => {
+    try {
+      const clipText = await Clipboard.getStringAsync();
+      if (!clipText || !clipText.trim()) {
+        setImportError('Clipboard is empty. Please copy your backup JSON first.');
+        return;
+      }
+      setImportText(clipText.trim());
+      setImportError(null);
+    } catch {
+      setImportError('Could not read from clipboard.');
+    }
+  };
+
+  const handleExecuteRestore = async () => {
+    if (!importText.trim()) {
+      setImportError('Please paste your backup JSON above.');
+      return;
+    }
+
+    try {
+      const restored = await restoreBackupJson(importText);
+      onImportState(restored);
+      setIsImportModalVisible(false);
+      setImportText('');
+      setImportError(null);
+      Alert.alert(
+        'Restore Complete! 🛡️',
+        `Successfully restored Day ${restored.currentDay} with ${restored.logs.length} journal entries and Level ${restored.characterLevel} stats.`
+      );
+    } catch (err: any) {
+      setImportError(err.message || 'Failed to restore backup.');
+    }
+  };
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       {/* Screen Header */}
@@ -143,7 +225,7 @@ export const HeroScreen: React.FC<HeroScreenProps> = ({
           </View>
         </View>
 
-        {/* Single-word Archetype Selector */}
+        {/* Archetype Selector */}
         <Text style={styles.selectorTitle}>Select Hero:</Text>
         <View style={styles.avatarPickerRow}>
           {CHARACTERS.map((opt) => {
@@ -221,18 +303,77 @@ export const HeroScreen: React.FC<HeroScreenProps> = ({
         </View>
       </View>
 
+      {/* ── App Data & Backup Section ── */}
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>App Data & Backup</Text>
+          <View style={styles.localStorageBadge}>
+            <Ionicons name="shield-checkmark" size={12} color={Theme.colors.mintDark} />
+            <Text style={styles.localStorageBadgeText}>Phone Storage</Text>
+          </View>
+        </View>
+
+        <View style={styles.backupCard}>
+          <Text style={styles.backupDesc}>
+            Your daily journals, stats, and XP calculations stay privately on your phone as app data. Export a backup before uninstalling or switching devices to preserve your journey.
+          </Text>
+
+          <View style={styles.backupActionsRow}>
+            {/* Export / Share Button */}
+            <TouchableOpacity
+              style={styles.exportShareButton}
+              onPress={handleExportShare}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="share-social-outline" size={16} color="#FFFFFF" />
+              <Text style={styles.exportShareButtonText}>Share Backup</Text>
+            </TouchableOpacity>
+
+            {/* Copy JSON Button */}
+            <TouchableOpacity
+              style={styles.exportCopyButton}
+              onPress={handleExportCopy}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="copy-outline" size={16} color={Theme.colors.purpleDark} />
+              <Text style={styles.exportCopyButtonText}>Copy JSON</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.systemDivider} />
+
+          {/* Import / Restore Button */}
+          <TouchableOpacity
+            style={styles.importButton}
+            onPress={() => {
+              setImportText('');
+              setImportError(null);
+              setIsImportModalVisible(true);
+            }}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="download-outline" size={17} color={Theme.colors.textPrimary} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.importButtonTitle}>Import / Restore Data</Text>
+              <Text style={styles.importButtonSub}>Restore your journey from backup text</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={16} color={Theme.colors.textMuted} />
+          </TouchableOpacity>
+        </View>
+      </View>
+
       {/* System Settings */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>System</Text>
         <View style={styles.systemCard}>
           <View style={styles.systemRow}>
             <View>
-              <Text style={styles.systemLabel}>Endpoint</Text>
+              <Text style={styles.systemLabel}>Evaluator Endpoint</Text>
               <Text style={styles.systemValue}>{apiBaseUrl}</Text>
             </View>
             <View style={styles.connectionBadge}>
               <View style={styles.greenDot} />
-              <Text style={styles.connectionText}>Active</Text>
+              <Text style={styles.connectionText}>Ready</Text>
             </View>
           </View>
 
@@ -244,12 +385,99 @@ export const HeroScreen: React.FC<HeroScreenProps> = ({
             activeOpacity={0.8}
           >
             <Ionicons name="trash-outline" size={16} color={Theme.colors.rose} />
-            <Text style={styles.resetButtonText}>Reset All Data (Testing)</Text>
+            <Text style={styles.resetButtonText}>Reset All Local Data</Text>
           </TouchableOpacity>
         </View>
       </View>
 
       <View style={{ height: 110 }} />
+
+      {/* ── Restore Data Modal ── */}
+      <Modal
+        visible={isImportModalVisible}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setIsImportModalVisible(false)}
+      >
+        <KeyboardAvoidingView
+          style={styles.modalOverlay}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          <View style={styles.modalContent}>
+            {/* Modal Header */}
+            <View style={styles.modalHeaderRow}>
+              <View style={styles.modalTitleContainer}>
+                <Text style={styles.modalTitle}>Restore Data</Text>
+                <Text style={styles.modalSubtitle}>Paste your exported Ethos JSON backup</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.modalCloseCircle}
+                onPress={() => setIsImportModalVisible(false)}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="close" size={20} color={Theme.colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            {/* Quick Paste from Clipboard */}
+            <TouchableOpacity
+              style={styles.quickPasteButton}
+              onPress={handlePasteFromClipboard}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="clipboard-outline" size={16} color={Theme.colors.purpleDark} />
+              <Text style={styles.quickPasteText}>Paste from Clipboard</Text>
+            </TouchableOpacity>
+
+            {/* Text Input for JSON */}
+            <TextInput
+              style={styles.modalTextInput}
+              placeholder="Paste backup JSON here..."
+              placeholderTextColor={Theme.colors.textMuted}
+              value={importText}
+              onChangeText={(val) => {
+                setImportText(val);
+                if (importError) setImportError(null);
+              }}
+              multiline
+              autoCapitalize="none"
+              autoCorrect={false}
+              textAlignVertical="top"
+            />
+
+            {importError && (
+              <View style={styles.modalErrorBox}>
+                <Ionicons name="alert-circle" size={16} color={Theme.colors.rose} />
+                <Text style={styles.modalErrorText}>{importError}</Text>
+              </View>
+            )}
+
+            {/* Action Buttons */}
+            <View style={styles.modalActionsRow}>
+              <TouchableOpacity
+                style={styles.modalCancelButton}
+                onPress={() => setIsImportModalVisible(false)}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.modalRestoreButton,
+                  !importText.trim() && styles.modalRestoreButtonDisabled,
+                ]}
+                onPress={handleExecuteRestore}
+                disabled={!importText.trim()}
+                activeOpacity={0.85}
+              >
+                <Ionicons name="checkmark-done" size={17} color="#FFFFFF" />
+                <Text style={styles.modalRestoreText}>Restore Now</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </ScrollView>
   );
 };
@@ -454,6 +682,90 @@ const styles = StyleSheet.create({
     color: Theme.colors.textSecondary,
     marginTop: 2,
   },
+  localStorageBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: Theme.colors.mintLight,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: Theme.radii.full,
+  },
+  localStorageBadgeText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: Theme.colors.mintDark,
+  },
+  backupCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: Theme.radii.xl,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: Theme.colors.border,
+    ...Theme.shadows.card,
+    gap: 12,
+  },
+  backupDesc: {
+    fontSize: 12.5,
+    lineHeight: 18,
+    color: Theme.colors.textSecondary,
+    fontWeight: '500',
+  },
+  backupActionsRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  exportShareButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: Theme.colors.purple,
+    paddingVertical: 12,
+    borderRadius: Theme.radii.md,
+    ...Theme.shadows.card,
+  },
+  exportShareButtonText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  exportCopyButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: Theme.colors.purpleLight,
+    paddingVertical: 12,
+    borderRadius: Theme.radii.md,
+    borderWidth: 1,
+    borderColor: Theme.colors.purple,
+  },
+  exportCopyButtonText: {
+    color: Theme.colors.purpleDark,
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  importButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: Theme.colors.backgroundSubtle,
+    padding: 12,
+    borderRadius: Theme.radii.md,
+  },
+  importButtonTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: Theme.colors.textPrimary,
+  },
+  importButtonSub: {
+    fontSize: 11,
+    color: Theme.colors.textMuted,
+    marginTop: 2,
+  },
   systemCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: Theme.radii.lg,
@@ -502,7 +814,7 @@ const styles = StyleSheet.create({
   systemDivider: {
     height: 1,
     backgroundColor: Theme.colors.borderLight,
-    marginVertical: 12,
+    marginVertical: 4,
   },
   resetButton: {
     flexDirection: 'row',
@@ -515,5 +827,123 @@ const styles = StyleSheet.create({
     color: Theme.colors.rose,
     fontSize: 13,
     fontWeight: '800',
+  },
+
+  // ── Restore Modal Styles ──
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: Theme.radii.xl,
+    borderTopRightRadius: Theme.radii.xl,
+    padding: 20,
+    paddingBottom: 36,
+    gap: 14,
+    ...Theme.shadows.card,
+  },
+  modalHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  modalTitleContainer: {
+    flex: 1,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '900',
+    color: Theme.colors.textPrimary,
+  },
+  modalSubtitle: {
+    fontSize: 12.5,
+    color: Theme.colors.textMuted,
+    marginTop: 2,
+  },
+  modalCloseCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: Theme.colors.backgroundSubtle,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  quickPasteButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: Theme.colors.purpleLight,
+    paddingVertical: 8,
+    borderRadius: Theme.radii.full,
+  },
+  quickPasteText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: Theme.colors.purpleDark,
+  },
+  modalTextInput: {
+    backgroundColor: Theme.colors.backgroundSubtle,
+    borderRadius: Theme.radii.md,
+    padding: 12,
+    height: 140,
+    fontSize: 12,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    color: Theme.colors.textPrimary,
+    borderWidth: 1,
+    borderColor: Theme.colors.border,
+  },
+  modalErrorBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: Theme.colors.roseLight,
+    padding: 10,
+    borderRadius: Theme.radii.md,
+  },
+  modalErrorText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: Theme.colors.roseDark,
+    flex: 1,
+  },
+  modalActionsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 4,
+  },
+  modalCancelButton: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    borderRadius: Theme.radii.lg,
+    backgroundColor: Theme.colors.backgroundSubtle,
+  },
+  modalCancelText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: Theme.colors.textSecondary,
+  },
+  modalRestoreButton: {
+    flex: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: Theme.colors.dockBg,
+    paddingVertical: 12,
+    borderRadius: Theme.radii.lg,
+    ...Theme.shadows.card,
+  },
+  modalRestoreButtonDisabled: {
+    opacity: 0.4,
+  },
+  modalRestoreText: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#FFFFFF',
   },
 });

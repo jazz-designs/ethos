@@ -221,7 +221,7 @@ export const SleekJournalInput: React.FC<SleekJournalInputProps> = ({
             )}
           </View>
 
-          <Text style={styles.summaryText}>"{lastResult.summary}"</Text>
+          <Text style={styles.summaryText}>"{lastResult.text}"</Text>
 
           {/* 4 Core Pillar Scores Grid */}
           <View style={styles.scoresGrid}>
