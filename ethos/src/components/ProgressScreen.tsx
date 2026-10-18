@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { Theme } from '../theme';
@@ -59,12 +59,12 @@ export const ProgressScreen: React.FC<ProgressScreenProps> = ({ state }) => {
             <Ionicons name="bar-chart" size={18} color="#FFFFFF" />
           </View>
           <View style={styles.tabToggle}>
-            <View style={[styles.tabToggleItem, styles.tabToggleActive]}>
+            <Pressable style={[styles.tabToggleItem, styles.tabToggleActive]}>
               <Text style={styles.tabToggleActiveText}>Weekly</Text>
-            </View>
-            <View style={styles.tabToggleItem}>
+            </Pressable>
+            <Pressable style={styles.tabToggleItem}>
               <Text style={styles.tabToggleText}>Lifetime</Text>
-            </View>
+            </Pressable>
           </View>
         </View>
 
@@ -217,8 +217,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 7,
     borderRadius: Theme.radii.full,
-    borderWidth: 1,
-    borderColor: Theme.colors.border,
+    borderCurve: 'continuous',
+    ...Theme.shadows.subtle,
   },
   filterPillText: {
     fontSize: 12,
@@ -228,9 +228,8 @@ const styles = StyleSheet.create({
   metricCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: Theme.radii.xl,
+    borderCurve: 'continuous',
     padding: 20,
-    borderWidth: 1,
-    borderColor: Theme.colors.border,
     ...Theme.shadows.card,
   },
   metricTopRow: {

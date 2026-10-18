@@ -4,6 +4,7 @@ import {
   Text,
   StyleSheet,
   ScrollView,
+  Pressable,
   TouchableOpacity,
   Share,
   Modal,
@@ -15,6 +16,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import * as Clipboard from 'expo-clipboard';
+import * as Haptics from 'expo-haptics';
 import { Theme } from '../theme';
 import { AppState, CharacterType, StatName } from '../types';
 import { CHARACTER_IMAGES } from '../assets';
@@ -231,14 +233,17 @@ export const HeroScreen: React.FC<HeroScreenProps> = ({
           {CHARACTERS.map((opt) => {
             const isSelected = selectedCharacter === opt.id;
             return (
-              <TouchableOpacity
+              <Pressable
                 key={opt.id}
-                style={[
+                style={({ pressed }) => [
                   styles.avatarChoice,
                   isSelected && styles.avatarChoiceSelected,
+                  pressed && { opacity: 0.8, transform: [{ scale: 0.96 }] },
                 ]}
-                onPress={() => onSelectCharacter(opt.id)}
-                activeOpacity={0.7}
+                onPress={() => {
+                  Haptics.selectionAsync();
+                  onSelectCharacter(opt.id);
+                }}
               >
                 <Image
                   source={CHARACTER_IMAGES[opt.id]}
@@ -248,7 +253,7 @@ export const HeroScreen: React.FC<HeroScreenProps> = ({
                 <Text style={[styles.avatarChoiceName, isSelected && styles.avatarChoiceNameSelected]}>
                   {opt.name}
                 </Text>
-              </TouchableOpacity>
+              </Pressable>
             );
           })}
         </View>
@@ -526,9 +531,8 @@ const styles = StyleSheet.create({
   heroCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: Theme.radii.xl,
+    borderCurve: 'continuous',
     padding: 18,
-    borderWidth: 1,
-    borderColor: Theme.colors.border,
     ...Theme.shadows.card,
   },
   avatarRow: {
@@ -650,9 +654,8 @@ const styles = StyleSheet.create({
     gap: 12,
     backgroundColor: '#FFFFFF',
     borderRadius: Theme.radii.lg,
+    borderCurve: 'continuous',
     padding: 12,
-    borderWidth: 1,
-    borderColor: Theme.colors.border,
     ...Theme.shadows.card,
   },
   achievementCardLocked: {

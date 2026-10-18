@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
+import * as Haptics from 'expo-haptics';
 import { Theme } from '../theme';
 import { LogEntry, StatName, MoodType } from '../types';
 import { MOOD_IMAGES, STAT_IMAGES } from '../assets';
@@ -29,6 +30,7 @@ export const ChroniclesScreen: React.FC<ChroniclesScreenProps> = ({ logs }) => {
   const [expandedDays, setExpandedDays] = useState<Set<number>>(new Set());
 
   const toggleDay = (day: number) => {
+    Haptics.selectionAsync();
     setExpandedDays((prev) => {
       const next = new Set(prev);
       if (next.has(day)) next.delete(day);
@@ -54,7 +56,7 @@ export const ChroniclesScreen: React.FC<ChroniclesScreenProps> = ({ logs }) => {
 
       {logs.length === 0 ? (
         <View style={styles.emptyContainer}>
-          <Text style={styles.emptyEmoji}>📜</Text>
+          <Ionicons name="book-outline" size={44} color={Theme.colors.purple} style={{ marginBottom: 12 }} />
           <Text style={styles.emptyTitle}>The Archives Are Silent</Text>
           <Text style={styles.emptyText}>
             Log your day on the Today tab to begin your permanent record.
@@ -68,11 +70,13 @@ export const ChroniclesScreen: React.FC<ChroniclesScreenProps> = ({ logs }) => {
             const moodMeta = MOOD_META[moodKey] || MOOD_META.good;
 
             return (
-              <TouchableOpacity
+              <Pressable
                 key={log.day}
-                style={styles.logCard}
+                style={({ pressed }) => [
+                  styles.logCard,
+                  pressed && { opacity: 0.9, transform: [{ scale: 0.99 }] },
+                ]}
                 onPress={() => toggleDay(log.day)}
-                activeOpacity={0.85}
               >
                 {/* Card Header */}
                 <View style={styles.cardHeader}>
@@ -188,7 +192,7 @@ export const ChroniclesScreen: React.FC<ChroniclesScreenProps> = ({ logs }) => {
                     </Text>
                   </View>
                 )}
-              </TouchableOpacity>
+              </Pressable>
             );
           })}
         </View>
@@ -231,8 +235,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: Theme.radii.full,
-    borderWidth: 1,
-    borderColor: Theme.colors.border,
+    borderCurve: 'continuous',
+    ...Theme.shadows.subtle,
   },
   countText: {
     fontSize: 12,
@@ -242,12 +246,11 @@ const styles = StyleSheet.create({
   emptyContainer: {
     backgroundColor: '#FFFFFF',
     borderRadius: Theme.radii.xl,
+    borderCurve: 'continuous',
     padding: 36,
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 20,
-    borderWidth: 1,
-    borderColor: Theme.colors.border,
     ...Theme.shadows.card,
   },
   emptyEmoji: {
@@ -272,9 +275,8 @@ const styles = StyleSheet.create({
   logCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: Theme.radii.xl,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: Theme.colors.border,
+    borderCurve: 'continuous',
+    padding: 18,
     ...Theme.shadows.card,
   },
   cardHeader: {

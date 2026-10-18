@@ -57,18 +57,18 @@ export const HeroStatsSection: React.FC<HeroStatsSectionProps> = ({
 }) => {
   return (
     <View style={styles.container}>
-      {/* ── Left Column: Way Bigger Character Image, on the left, bleeding offscreen to the left ── */}
+      {/* ── Left: Featured Hero Stage (Character prominent and crisp) ── */}
       <View style={styles.heroColumn}>
-        <View style={styles.glowCircle} />
+        <View style={styles.glowAura} />
         <Image
           source={CHARACTER_IMAGES[character]}
           style={styles.heroImage}
           contentFit="contain"
-          transition={200}
+          transition={250}
         />
       </View>
 
-      {/* ── Right Column: 4 Stats Stacked Vertically to the right of the character ── */}
+      {/* ── Right: 4 Core Pillars Stacked Vertically ── */}
       <View style={styles.statsColumn}>
         {STAT_CONFIGS.map((config) => {
           const statData = stats[config.name] || { level: 1, xp: 0 };
@@ -77,7 +77,8 @@ export const HeroStatsSection: React.FC<HeroStatsSectionProps> = ({
 
           return (
             <View key={config.name} style={styles.statCard}>
-              <View style={styles.statCardHeader}>
+              <View style={styles.statRow}>
+                {/* Stat Icon */}
                 <View style={[styles.iconCircle, { backgroundColor: config.lightBg }]}>
                   <Image
                     source={STAT_IMAGES[config.name]}
@@ -86,15 +87,18 @@ export const HeroStatsSection: React.FC<HeroStatsSectionProps> = ({
                   />
                 </View>
 
-                <View style={styles.labelContainer}>
-                  <View style={styles.labelTopRow}>
+                {/* Stat Details */}
+                <View style={styles.statInfo}>
+                  <View style={styles.statTopLine}>
                     <Text style={styles.statLabel} numberOfLines={1}>
                       {config.label}
                     </Text>
-                    <Text style={styles.statLevelText}>Lv {statData.level}</Text>
+                    <Text style={[styles.statLevel, { color: config.darkColor }]}>
+                      Lv {statData.level}
+                    </Text>
                   </View>
 
-                  {/* Progress Track */}
+                  {/* Progress Meter */}
                   <View style={styles.progressTrack}>
                     <View
                       style={[
@@ -107,9 +111,9 @@ export const HeroStatsSection: React.FC<HeroStatsSectionProps> = ({
                     />
                   </View>
 
-                  {/* XP fraction */}
+                  {/* XP Numbers */}
                   <View style={styles.xpRow}>
-                    <Text style={styles.xpCurrent}>
+                    <Text style={styles.xpText}>
                       {statData.xp}/{needed} XP
                     </Text>
                     <Text style={[styles.xpPercent, { color: config.darkColor }]}>
@@ -131,106 +135,103 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingRight: 18,
-    position: 'relative',
-    overflow: 'visible',
-    marginVertical: 4,
+    paddingHorizontal: Theme.spacing.lg,
+    paddingVertical: Theme.spacing.sm,
+    gap: Theme.spacing.md,
   },
   heroColumn: {
-    width: '46%',
-    height: 310,
+    flex: 1,
+    height: 270,
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
-    marginLeft: -25, // Bleeds offscreen to the left as requested
-    zIndex: -1,
-    overflow: 'visible',
   },
-  glowCircle: {
+  glowAura: {
     position: 'absolute',
-    width: 220,
-    height: 220,
-    borderRadius: 110,
-    backgroundColor: 'rgba(120, 104, 230, 0.08)',
+    width: 190,
+    height: 190,
+    borderRadius: 95,
+    backgroundColor: 'rgba(124, 110, 230, 0.09)',
   },
   heroImage: {
-    width: 450,
-    height: 400,
+    width: '100%',
+    height: '100%',
   },
   statsColumn: {
-    flex: 1,
+    width: '54%',
     gap: 8,
-    zIndex: 2,
-    maxWidth: '56%',
   },
   statCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: Theme.radii.md,
+    borderCurve: 'continuous',
     paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderWidth: 1,
-    borderColor: Theme.colors.border,
+    paddingVertical: 9,
     ...Theme.shadows.card,
   },
-  statCardHeader: {
+  statRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
   },
   iconCircle: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 3,
+    padding: 4,
   },
   statPng: {
     width: 20,
     height: 20,
   },
-  labelContainer: {
+  statInfo: {
     flex: 1,
   },
-  labelTopRow: {
+  statTopLine: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 3,
+    marginBottom: 4,
   },
   statLabel: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '800',
     color: Theme.colors.textPrimary,
   },
-  statLevelText: {
-    fontSize: 10,
+  statLevel: {
+    fontSize: 11,
     fontWeight: '800',
-    color: Theme.colors.textSecondary,
+    fontVariant: ['tabular-nums'],
   },
   progressTrack: {
-    height: 5,
+    height: 6,
     backgroundColor: Theme.colors.backgroundSubtle,
     borderRadius: Theme.radii.full,
+    borderCurve: 'continuous',
     overflow: 'hidden',
     marginBottom: 3,
   },
   progressBar: {
     height: '100%',
     borderRadius: Theme.radii.full,
+    borderCurve: 'continuous',
   },
   xpRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  xpCurrent: {
-    fontSize: 9,
+  xpText: {
+    fontSize: 9.5,
     fontWeight: '700',
     color: Theme.colors.textMuted,
+    fontVariant: ['tabular-nums'],
   },
   xpPercent: {
-    fontSize: 9,
+    fontSize: 9.5,
     fontWeight: '800',
+    fontVariant: ['tabular-nums'],
   },
 });

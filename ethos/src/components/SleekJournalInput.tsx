@@ -3,12 +3,13 @@ import {
   View,
   Text,
   TextInput,
-  TouchableOpacity,
+  Pressable,
   StyleSheet,
   ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
+import * as Haptics from 'expo-haptics';
 import { Theme } from '../theme';
 import { LogEntry, MoodType, StatName } from '../types';
 import { MOOD_IMAGES, STAT_IMAGES } from '../assets';
@@ -60,45 +61,58 @@ export const SleekJournalInput: React.FC<SleekJournalInputProps> = ({
   const [isFocused, setIsFocused] = useState(false);
   const [swappedToInput, setSwappedToInput] = useState(false);
 
-  // When day changes, reset to showing the mood tracker first
+  // When day advances, reset to mood view
   React.useEffect(() => {
     setSwappedToInput(false);
   }, [day]);
 
   const handleChooseMood = (mood: MoodType) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     onSelectMood(mood);
     setSwappedToInput(true);
   };
 
   const handleSwitchToMoods = () => {
+    Haptics.selectionAsync();
     setSwappedToInput(false);
   };
 
-  // If day is not logged:
-  // - Show ONLY the mood tracker at first (before a mood is tapped/swapped)
-  // - Swapping to input box occurs once a mood is chosen
+  const handleSendPress = () => {
+    if (!text.trim() || loading) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    onEvaluate();
+  };
+
+  const handleAdvanceDay = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    onNextDay();
+  };
+
+  // Show ONLY the mood tracker at first (before a mood is tapped)
   const showMoodTrackerFirst = !dayLogged && !swappedToInput;
 
   return (
     <View style={styles.container}>
-      {/* ── 1. MOOD TRACKER FIRST (Only mood tracker at first, Big icons, No surrounding background box) ── */}
+      {/* ── 1. MOOD TRACKER FIRST (Unboxed, Big Expressive Icons) ── */}
       {showMoodTrackerFirst ? (
         <View style={styles.moodTrackerContainer}>
-          <View style={styles.moodHeaderRow}>
+          <View style={styles.moodHeader}>
             <Text style={styles.moodTitle}>How was your day?</Text>
             <Text style={styles.moodSubtitle}>Select your mood to chronicle your feats</Text>
           </View>
 
-          {/* 5 Big Mood Icons with NO background surrounding each mood */}
+          {/* 5 Big Mood Icons with no surrounding background boxes */}
           <View style={styles.moodsRow}>
             {MOODS.map((m) => {
               const isSelected = selectedMood === m.id;
               return (
-                <TouchableOpacity
+                <Pressable
                   key={m.id}
-                  style={styles.moodItem}
+                  style={({ pressed }) => [
+                    styles.moodItem,
+                    pressed && styles.moodItemPressed,
+                  ]}
                   onPress={() => handleChooseMood(m.id)}
-                  activeOpacity={0.65}
                 >
                   <View style={[styles.moodIconWrapper, isSelected && styles.moodIconSelected]}>
                     <Image
@@ -119,7 +133,7 @@ export const SleekJournalInput: React.FC<SleekJournalInputProps> = ({
                   {isSelected && (
                     <View style={[styles.activeDot, { backgroundColor: m.color }]} />
                   )}
-                </TouchableOpacity>
+                </Pressable>
               );
             })}
           </View>
@@ -130,10 +144,12 @@ export const SleekJournalInput: React.FC<SleekJournalInputProps> = ({
           {/* Header showing selected mood with option to switch back */}
           {selectedMood && (
             <View style={styles.selectedMoodHeader}>
-              <TouchableOpacity
-                style={styles.selectedMoodPill}
+              <Pressable
+                style={({ pressed }) => [
+                  styles.selectedMoodPill,
+                  pressed && { opacity: 0.8 },
+                ]}
                 onPress={handleSwitchToMoods}
-                activeOpacity={0.7}
               >
                 <Image
                   source={MOOD_IMAGES[selectedMood]}
@@ -144,7 +160,7 @@ export const SleekJournalInput: React.FC<SleekJournalInputProps> = ({
                   {selectedMood.charAt(0).toUpperCase() + selectedMood.slice(1)} Aura
                 </Text>
                 <Text style={styles.pillChangeText}>Change ▾</Text>
-              </TouchableOpacity>
+              </Pressable>
             </View>
           )}
 
@@ -165,28 +181,28 @@ export const SleekJournalInput: React.FC<SleekJournalInputProps> = ({
               editable={!loading}
             />
 
-            <TouchableOpacity
-              style={[
+            <Pressable
+              style={({ pressed }) => [
                 styles.sendButton,
                 (!text.trim() || loading) && styles.sendButtonDisabled,
+                pressed && text.trim() && !loading && { transform: [{ scale: 0.94 }] },
               ]}
-              onPress={onEvaluate}
+              onPress={handleSendPress}
               disabled={!text.trim() || loading}
-              activeOpacity={0.85}
             >
               {loading ? (
                 <ActivityIndicator size="small" color="#FFFFFF" />
               ) : (
                 <Ionicons name="arrow-up" size={20} color="#FFFFFF" />
               )}
-            </TouchableOpacity>
+            </Pressable>
           </View>
         </View>
       ) : (
         /* ── 3. DAY LOGGED NOTICE ── */
         <View style={styles.loggedNotice}>
           <View style={styles.loggedRow}>
-            <Ionicons name="checkmark-circle" size={20} color={Theme.colors.mint} />
+            <Ionicons name="checkmark-circle" size={22} color={Theme.colors.mint} />
             <Text style={styles.loggedText}>Day {day} Chronicle Evaluated</Text>
           </View>
         </View>
@@ -194,7 +210,7 @@ export const SleekJournalInput: React.FC<SleekJournalInputProps> = ({
 
       {error && (
         <View style={styles.errorBox}>
-          <Ionicons name="alert-circle" size={16} color={Theme.colors.rose} />
+          <Ionicons name="alert-circle" size={18} color={Theme.colors.rose} />
           <Text style={styles.errorText}>{error}</Text>
         </View>
       )}
@@ -221,7 +237,7 @@ export const SleekJournalInput: React.FC<SleekJournalInputProps> = ({
             )}
           </View>
 
-          <Text style={styles.summaryText}>"{lastResult.text}"</Text>
+          <Text style={styles.summaryText}>"{lastResult.summary}"</Text>
 
           {/* 4 Core Pillar Scores Grid */}
           <View style={styles.scoresGrid}>
@@ -275,14 +291,16 @@ export const SleekJournalInput: React.FC<SleekJournalInputProps> = ({
           )}
 
           {/* Advance to Next Day Button */}
-          <TouchableOpacity
-            style={styles.nextDayButton}
-            onPress={onNextDay}
-            activeOpacity={0.85}
+          <Pressable
+            style={({ pressed }) => [
+              styles.nextDayButton,
+              pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] },
+            ]}
+            onPress={handleAdvanceDay}
           >
             <Text style={styles.nextDayButtonText}>Advance to Day {day + 1}</Text>
             <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />
-          </TouchableOpacity>
+          </Pressable>
         </View>
       )}
     </View>
@@ -291,31 +309,32 @@ export const SleekJournalInput: React.FC<SleekJournalInputProps> = ({
 
 const styles = StyleSheet.create({
   container: {
-    paddingHorizontal: 18,
-    gap: 12,
+    paddingHorizontal: Theme.spacing.lg,
+    gap: Theme.spacing.md,
   },
+
   // ── Mood Tracker (First view) ──
   moodTrackerContainer: {
-    paddingVertical: 12,
+    paddingVertical: Theme.spacing.sm,
     paddingHorizontal: 2,
   },
-  moodHeaderRow: {
+  moodHeader: {
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 16,
+    marginBottom: Theme.spacing.lg,
   },
   moodTitle: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: '900',
     color: Theme.colors.textPrimary,
-    letterSpacing: -0.4,
+    letterSpacing: -0.6,
     textAlign: 'center',
   },
   moodSubtitle: {
-    fontSize: 13,
+    fontSize: 13.5,
     fontWeight: '600',
     color: Theme.colors.textMuted,
-    marginTop: 3,
+    marginTop: 4,
     textAlign: 'center',
   },
   moodsRow: {
@@ -327,18 +346,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     flex: 1,
-    paddingVertical: 4,
+    paddingVertical: 6,
+  },
+  moodItemPressed: {
+    transform: [{ scale: 0.93 }],
   },
   moodIconWrapper: {
     alignItems: 'center',
     justifyContent: 'center',
   },
   moodIconSelected: {
-    transform: [{ scale: 1.12 }],
+    transform: [{ scale: 1.15 }],
   },
   bigMoodIcon: {
-    width: 66,
-    height: 66,
+    width: 62,
+    height: 62,
   },
   moodLabel: {
     fontSize: 12,
@@ -374,21 +396,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: Theme.radii.full,
-    borderWidth: 1,
-    borderColor: Theme.colors.border,
-    ...Theme.shadows.card,
+    borderCurve: 'continuous',
+    ...Theme.shadows.subtle,
   },
   pillMoodIcon: {
     width: 20,
     height: 20,
   },
   pillMoodText: {
-    fontSize: 12,
+    fontSize: 12.5,
     fontWeight: '800',
     color: Theme.colors.textPrimary,
   },
   pillChangeText: {
-    fontSize: 11,
+    fontSize: 11.5,
     fontWeight: '700',
     color: Theme.colors.purple,
     marginLeft: 2,
@@ -398,10 +419,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
     borderRadius: Theme.radii.xl,
+    borderCurve: 'continuous',
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderWidth: 1.5,
-    borderColor: Theme.colors.border,
+    borderColor: 'transparent',
     ...Theme.shadows.card,
   },
   inputBoxFocused: {
@@ -409,21 +431,21 @@ const styles = StyleSheet.create({
   },
   textInput: {
     flex: 1,
-    fontSize: 15,
+    fontSize: 15.5,
     color: Theme.colors.textPrimary,
     maxHeight: 120,
-    minHeight: 44,
-    lineHeight: 21,
+    minHeight: 46,
+    lineHeight: 22,
   },
   sendButton: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: Theme.colors.dockBg,
     alignItems: 'center',
     justifyContent: 'center',
     marginLeft: 8,
-    ...Theme.shadows.card,
+    ...Theme.shadows.subtle,
   },
   sendButtonDisabled: {
     opacity: 0.35,
@@ -433,10 +455,10 @@ const styles = StyleSheet.create({
   loggedNotice: {
     backgroundColor: '#FFFFFF',
     borderRadius: Theme.radii.lg,
-    padding: 14,
+    borderCurve: 'continuous',
+    padding: 16,
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: Theme.colors.border,
+    ...Theme.shadows.subtle,
   },
   loggedRow: {
     flexDirection: 'row',
@@ -444,20 +466,21 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   loggedText: {
-    fontSize: 14,
+    fontSize: 14.5,
     fontWeight: '800',
     color: Theme.colors.textPrimary,
   },
   errorBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 8,
     backgroundColor: Theme.colors.roseLight,
-    padding: 10,
+    padding: 12,
     borderRadius: Theme.radii.md,
+    borderCurve: 'continuous',
   },
   errorText: {
-    fontSize: 12,
+    fontSize: 12.5,
     fontWeight: '600',
     color: Theme.colors.roseDark,
     flex: 1,
@@ -467,16 +490,15 @@ const styles = StyleSheet.create({
   resultCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: Theme.radii.xl,
-    padding: 18,
-    borderWidth: 1,
-    borderColor: Theme.colors.border,
+    borderCurve: 'continuous',
+    padding: 20,
     ...Theme.shadows.card,
   },
   resultHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 10,
+    marginBottom: 12,
   },
   resultBadge: {
     flexDirection: 'row',
@@ -484,11 +506,12 @@ const styles = StyleSheet.create({
     gap: 5,
     backgroundColor: Theme.colors.purpleLight,
     paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingVertical: 5,
     borderRadius: Theme.radii.full,
+    borderCurve: 'continuous',
   },
   resultBadgeText: {
-    fontSize: 11,
+    fontSize: 11.5,
     fontWeight: '800',
     color: Theme.colors.purpleDark,
   },
@@ -497,61 +520,65 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 4,
     backgroundColor: Theme.colors.backgroundSubtle,
-    paddingHorizontal: 8,
+    paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: Theme.radii.full,
+    borderCurve: 'continuous',
   },
   resultMoodIcon: {
     width: 14,
     height: 14,
   },
   resultMoodText: {
-    fontSize: 11,
+    fontSize: 11.5,
     fontWeight: '700',
     color: Theme.colors.textSecondary,
   },
   summaryText: {
-    fontSize: 13.5,
+    fontSize: 14,
     fontWeight: '600',
     color: Theme.colors.textPrimary,
-    lineHeight: 20,
+    lineHeight: 21,
     fontStyle: 'italic',
-    marginBottom: 14,
+    marginBottom: 16,
   },
   scoresGrid: {
     flexDirection: 'row',
-    gap: 6,
-    marginBottom: 14,
+    gap: 8,
+    marginBottom: 16,
   },
   scoreChip: {
     flex: 1,
     borderRadius: Theme.radii.md,
-    padding: 8,
+    borderCurve: 'continuous',
+    padding: 10,
     alignItems: 'center',
   },
   scoreTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
+    gap: 4,
     marginBottom: 4,
   },
   scoreStatIcon: {
-    width: 12,
-    height: 12,
+    width: 13,
+    height: 13,
   },
   scoreStatName: {
-    fontSize: 9.5,
+    fontSize: 10,
     fontWeight: '800',
   },
   scoreNumber: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: '900',
+    fontVariant: ['tabular-nums'],
     letterSpacing: -0.5,
   },
   xpChangeText: {
-    fontSize: 9.5,
+    fontSize: 10,
     fontWeight: '700',
     color: Theme.colors.textSecondary,
+    fontVariant: ['tabular-nums'],
     marginTop: 2,
   },
   levelUpCard: {
@@ -560,18 +587,17 @@ const styles = StyleSheet.create({
     gap: 12,
     backgroundColor: Theme.colors.goldLight,
     borderRadius: Theme.radii.lg,
-    padding: 12,
-    marginBottom: 14,
-    borderWidth: 1,
-    borderColor: '#FFE0A0',
+    borderCurve: 'continuous',
+    padding: 14,
+    marginBottom: 16,
   },
   levelUpTitle: {
-    fontSize: 13,
+    fontSize: 13.5,
     fontWeight: '900',
     color: Theme.colors.goldDark,
   },
   levelUpDetail: {
-    fontSize: 11.5,
+    fontSize: 12,
     fontWeight: '700',
     color: Theme.colors.textPrimary,
     marginTop: 2,
@@ -583,12 +609,13 @@ const styles = StyleSheet.create({
     gap: 8,
     backgroundColor: Theme.colors.purple,
     borderRadius: Theme.radii.lg,
-    paddingVertical: 14,
+    borderCurve: 'continuous',
+    paddingVertical: 15,
     ...Theme.shadows.card,
   },
   nextDayButtonText: {
     color: '#FFFFFF',
-    fontSize: 14.5,
+    fontSize: 15,
     fontWeight: '800',
   },
 });
