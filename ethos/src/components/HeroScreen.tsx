@@ -16,10 +16,9 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import * as Clipboard from 'expo-clipboard';
-import * as Haptics from 'expo-haptics';
 import { Theme } from '../theme';
 import { AppState, CharacterType, StatName } from '../types';
-import { CHARACTER_IMAGES } from '../assets';
+import { CHARACTER_IMAGES, CHARACTER_INFO } from '../assets';
 import { createBackupJson, restoreBackupJson } from '../storage';
 
 interface HeroScreenProps {
@@ -32,10 +31,10 @@ interface HeroScreenProps {
 }
 
 const CHARACTERS: { id: CharacterType; name: string }[] = [
-  { id: 'mage', name: 'Mage' },
-  { id: 'warrior', name: 'Warrior' },
-  { id: 'monk', name: 'Monk' },
-  { id: 'ranger', name: 'Ranger' },
+  { id: 'ch_1', name: 'Kael' },
+  { id: 'ch_2', name: 'Sora' },
+  { id: 'ch_3', name: 'Lyra' },
+  { id: 'ch_4', name: 'Finn' },
 ];
 
 export const HeroScreen: React.FC<HeroScreenProps> = ({
@@ -57,7 +56,7 @@ export const HeroScreen: React.FC<HeroScreenProps> = ({
   // Dominant stat
   let dominantStat: StatName = 'intelligence';
   let highestLevel = -1;
-  (['health', 'intelligence', 'mental_health', 'strength'] as StatName[]).forEach((s) => {
+  (['health', 'intelligence', 'mental_health', 'physique'] as StatName[]).forEach((s) => {
     if (stats[s]?.level > highestLevel) {
       highestLevel = stats[s]?.level;
       dominantStat = s;
@@ -68,7 +67,7 @@ export const HeroScreen: React.FC<HeroScreenProps> = ({
     health: 'Vitality Vanguard',
     intelligence: 'Grand Scholar',
     mental_health: 'Zen Master',
-    strength: 'Iron Titan',
+    physique: 'Iron Titan',
   };
 
   const achievements = [
@@ -91,13 +90,13 @@ export const HeroScreen: React.FC<HeroScreenProps> = ({
       bg: Theme.colors.orangeLight,
     },
     {
-      id: 'strength_up',
+      id: 'physique_up',
       icon: 'barbell',
       title: 'Iron Body',
-      desc: 'Reach Level 2 in Strength',
-      unlocked: stats.strength?.level >= 2,
-      color: Theme.colors.orangeDark,
-      bg: Theme.colors.orangeLight,
+      desc: 'Reach Level 2 in Physique',
+      unlocked: (stats.physique?.level ?? 1) >= 2,
+      color: '#FFD5D8',
+      bg: '#FFF0F1',
     },
     {
       id: 'intelligence_up',
@@ -216,9 +215,11 @@ export const HeroScreen: React.FC<HeroScreenProps> = ({
           </View>
           <View style={styles.heroInfo}>
             <Text style={styles.heroName}>
-              {selectedCharacter.charAt(0).toUpperCase() + selectedCharacter.slice(1)}
+              {CHARACTER_INFO[selectedCharacter]?.name || 'Hero'}
             </Text>
-            <Text style={styles.heroSubTitle}>{dominantTitles[dominantStat]}</Text>
+            <Text style={styles.heroSubTitle}>
+              {CHARACTER_INFO[selectedCharacter]?.title || dominantTitles[dominantStat]}
+            </Text>
             <View style={styles.tagRow}>
               <View style={styles.statusPill}>
                 <Text style={styles.statusPillText}>{totalXp} XP Stored</Text>
@@ -241,7 +242,6 @@ export const HeroScreen: React.FC<HeroScreenProps> = ({
                   pressed && { opacity: 0.8, transform: [{ scale: 0.96 }] },
                 ]}
                 onPress={() => {
-                  Haptics.selectionAsync();
                   onSelectCharacter(opt.id);
                 }}
               >

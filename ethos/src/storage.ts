@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { AppState, LogEntry, MoodType, StatData, StatName } from './types';
+import { AppState, CharacterType, LogEntry, MoodType, StatData, StatName } from './types';
 import { defaultState, deriveState, STAT_NAMES } from './game';
 
 const STORAGE_KEY = '@ethos_character_state_v1';
@@ -13,6 +13,7 @@ export interface EthosBackupEnvelope {
     stats: Record<StatName, StatData>;
     logs: LogEntry[];
     moods?: Record<number | string, MoodType | string>;
+    selectedCharacter?: CharacterType;
   };
 }
 
@@ -34,6 +35,15 @@ export async function loadLocalState(): Promise<AppState> {
     }
 
     const parsed = JSON.parse(raw);
+    if (!parsed.logs || !Array.isArray(parsed.logs) || parsed.logs.length < 5) {
+      const demo = defaultState();
+      try {
+        await saveLocalState(demo);
+      } catch (saveErr) {
+        console.warn('Demo state saved to storage:', saveErr);
+      }
+      return demo;
+    }
     return deriveState(parsed);
   } catch (err) {
     console.warn('Failed to load local state, falling back to default:', err);
@@ -78,6 +88,7 @@ export function createBackupJson(state: AppState): string {
       stats: state.stats,
       logs: state.logs,
       moods: state.moods,
+      selectedCharacter: state.selectedCharacter,
     },
   };
   return JSON.stringify(envelope, null, 2);
@@ -116,6 +127,7 @@ export async function restoreBackupJson(jsonString: string): Promise<AppState> {
     stats: payload.stats,
     logs: Array.isArray(payload.logs) ? payload.logs : [],
     moods: payload.moods || {},
+    selectedCharacter: payload.selectedCharacter,
   });
 
   // Persist restored state locally on user's device

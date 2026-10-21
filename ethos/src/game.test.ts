@@ -29,7 +29,7 @@ strictEqual(r2.xp, 35);
 strictEqual(r2.levelUps.length, 2);
 
 // 4. Negative XP floor at 0
-const r3 = applyXp('strength', 2, 50, -10);
+const r3 = applyXp('physique', 2, 50, -10);
 strictEqual(r3.level, 2, 'Level must never decrease');
 strictEqual(r3.xp, 0, 'XP floors at 0');
 
@@ -37,7 +37,7 @@ strictEqual(r3.xp, 0, 'XP floors at 0');
 const st = defaultState();
 strictEqual(characterLevel(st.stats), 1);
 st.stats.health.level = 3;
-st.stats.strength.level = 2;
+st.stats.physique.level = 2;
 st.stats.intelligence.level = 4;
 st.stats.mental_health.level = 3;
 strictEqual(characterLevel(st.stats), 3);

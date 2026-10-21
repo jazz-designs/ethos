@@ -1,10 +1,20 @@
-import { AppState, LevelUpEvent, LogEntry, MoodType, StatData, StatName } from './types';
+import {
+  AppState,
+  CharacterType,
+  LevelUpEvent,
+  LogEntry,
+  MoodType,
+  StatData,
+  StatName,
+  TaskItem,
+} from './types';
+import { ACTIVITY_IMAGES } from './assets';
 
 export const STAT_NAMES: readonly StatName[] = [
   'health',
   'intelligence',
   'mental_health',
-  'strength',
+  'physique',
 ] as const;
 
 /**
@@ -58,30 +68,235 @@ export function characterLevel(stats: Record<StatName, StatData>): number {
 /**
  * Fresh default state for Day 1.
  */
-export function defaultState(): AppState {
+/**
+ * 2 weeks worth of rich journal entries and stats for testing and visual polish.
+ * Uses the user's workout, dance, couch, and first images.
+ */
+export function createTwoWeekDemoState(): AppState {
   const stats: Record<StatName, StatData> = {
-    health: { level: 1, xp: 0 },
-    intelligence: { level: 1, xp: 0 },
-    mental_health: { level: 1, xp: 0 },
-    strength: { level: 1, xp: 0 },
+    physique: { level: 2, xp: 56 }, // ~49% of 115
+    intelligence: { level: 2, xp: 44 }, // ~38% of 115
+    health: { level: 1, xp: 80 }, // 80% of 100
+    mental_health: { level: 1, xp: 38 }, // 38% of 100
   };
 
   const xpNeededMap: Record<StatName, number> = {
+    physique: xpNeeded(2),
+    intelligence: xpNeeded(2),
     health: xpNeeded(1),
-    intelligence: xpNeeded(1),
     mental_health: xpNeeded(1),
-    strength: xpNeeded(1),
   };
 
-  return {
-    currentDay: 1,
-    stats,
-    logs: [],
-    moods: {},
-    xpNeeded: xpNeededMap,
-    characterLevel: 1,
-    currentMood: null,
+  const now = new Date();
+  const getPastIso = (daysAgo: number) => {
+    const d = new Date(now);
+    d.setDate(d.getDate() - daysAgo);
+    return d.toISOString();
   };
+
+  const logs: LogEntry[] = [
+    {
+      day: 14,
+      text: "Heavy bench press session at the gym. Crushed a new personal record of 100kg!",
+      mood: 'good',
+      scores: { physique: 5, health: 2, mental_health: -1, intelligence: 1 },
+      xpChanges: { physique: 50, health: 20, mental_health: -10, intelligence: 10 },
+      levelUps: [],
+      summary: "Board • Worked out",
+      activityScene: "character lifting a heavy barbell at the gym",
+      imageUrl: ACTIVITY_IMAGES.workout,
+      createdAt: getPastIso(0),
+    },
+    {
+      day: 13,
+      text: "Practiced street dance choreo with headphones in the living room for two hours.",
+      mood: 'excellent',
+      scores: { physique: 4, health: 3, mental_health: 4, intelligence: 1 },
+      xpChanges: { physique: 40, health: 30, mental_health: 40, intelligence: 10 },
+      levelUps: [],
+      summary: "Fun • Danced",
+      activityScene: "character dancing with headphones",
+      imageUrl: ACTIVITY_IMAGES.dance,
+      createdAt: getPastIso(1),
+    },
+    {
+      day: 12,
+      text: "Felt super tired and exhausted. Spent the entire evening on the couch watching movies.",
+      mood: 'neutral',
+      scores: { physique: -1, health: -1, mental_health: 2, intelligence: 0 },
+      xpChanges: { physique: -10, health: -10, mental_health: 20, intelligence: 0 },
+      levelUps: [],
+      summary: "Board • Watched TV",
+      activityScene: "character relaxing on couch",
+      imageUrl: ACTIVITY_IMAGES.couch,
+      createdAt: getPastIso(2),
+    },
+    {
+      day: 11,
+      text: "Won 1st place in the hackathon finals! Received the golden championship trophy!",
+      mood: 'excellent',
+      scores: { physique: 0, health: 1, mental_health: 5, intelligence: 5 },
+      xpChanges: { physique: 0, health: 10, mental_health: 50, intelligence: 50 },
+      levelUps: [{ stat: 'intelligence', newLevel: 2 }],
+      summary: "Coding • First",
+      activityScene: "character holding first place trophy",
+      imageUrl: ACTIVITY_IMAGES.first,
+      createdAt: getPastIso(3),
+    },
+    {
+      day: 10,
+      text: "Intense full body workout followed by clean nutrition meal prep.",
+      mood: 'good',
+      scores: { physique: 4, health: 4, mental_health: 3, intelligence: 0 },
+      xpChanges: { physique: 40, health: 40, mental_health: 30, intelligence: 0 },
+      levelUps: [{ stat: 'physique', newLevel: 2 }],
+      summary: "Gym • Workout",
+      activityScene: "character working out",
+      imageUrl: ACTIVITY_IMAGES.workout,
+      createdAt: getPastIso(4),
+    },
+    {
+      day: 9,
+      text: "Freestyle dance session with studio friends. High energy throughout the night.",
+      mood: 'excellent',
+      scores: { physique: 3, health: 3, mental_health: 4, intelligence: 1 },
+      xpChanges: { physique: 30, health: 30, mental_health: 40, intelligence: 10 },
+      levelUps: [],
+      summary: "Rhythm • Danced",
+      activityScene: "character dancing",
+      imageUrl: ACTIVITY_IMAGES.dance,
+      createdAt: getPastIso(5),
+    },
+    {
+      day: 8,
+      text: "Rest day on the couch reading books and listening to low-fi beats.",
+      mood: 'bad',
+      scores: { physique: 0, health: 0, mental_health: 1, intelligence: 2 },
+      xpChanges: { physique: 0, health: 0, mental_health: 10, intelligence: 20 },
+      levelUps: [],
+      summary: "Rest • Couch",
+      activityScene: "character relaxing on couch",
+      imageUrl: ACTIVITY_IMAGES.couch,
+      createdAt: getPastIso(6),
+    },
+    {
+      day: 7,
+      text: "Solved complex algorithm problems and ranked first on the leaderboard contest.",
+      mood: 'excellent',
+      scores: { physique: 0, health: 1, mental_health: 4, intelligence: 5 },
+      xpChanges: { physique: 0, health: 10, mental_health: 40, intelligence: 50 },
+      levelUps: [],
+      summary: "Contest • First",
+      activityScene: "character holding trophy",
+      imageUrl: ACTIVITY_IMAGES.first,
+      createdAt: getPastIso(7),
+    },
+    {
+      day: 6,
+      text: "Back and shoulder strength routine. Good focus and pump.",
+      mood: 'good',
+      scores: { physique: 4, health: 3, mental_health: 2, intelligence: 0 },
+      xpChanges: { physique: 40, health: 30, mental_health: 20, intelligence: 0 },
+      levelUps: [],
+      summary: "Power • Worked out",
+      activityScene: "character working out",
+      imageUrl: ACTIVITY_IMAGES.workout,
+      createdAt: getPastIso(8),
+    },
+    {
+      day: 5,
+      text: "Celebrated completion of app prototype with a dance performance.",
+      mood: 'excellent',
+      scores: { physique: 3, health: 2, mental_health: 4, intelligence: 2 },
+      xpChanges: { physique: 30, health: 20, mental_health: 40, intelligence: 20 },
+      levelUps: [],
+      summary: "Joy • Danced",
+      activityScene: "character dancing",
+      imageUrl: ACTIVITY_IMAGES.dance,
+      createdAt: getPastIso(9),
+    },
+    {
+      day: 4,
+      text: "Tired day. Stayed in cozy clothes on the sofa all afternoon.",
+      mood: 'neutral',
+      scores: { physique: -1, health: 0, mental_health: 1, intelligence: 1 },
+      xpChanges: { physique: -10, health: 0, mental_health: 10, intelligence: 10 },
+      levelUps: [],
+      summary: "Calm • Sofa",
+      activityScene: "character on couch",
+      imageUrl: ACTIVITY_IMAGES.couch,
+      createdAt: getPastIso(10),
+    },
+    {
+      day: 3,
+      text: "Won our university pitch competition! Outstanding feedback from judges.",
+      mood: 'good',
+      scores: { physique: 0, health: 1, mental_health: 4, intelligence: 4 },
+      xpChanges: { physique: 0, health: 10, mental_health: 40, intelligence: 40 },
+      levelUps: [],
+      summary: "Pitch • First",
+      activityScene: "character with prize",
+      imageUrl: ACTIVITY_IMAGES.first,
+      createdAt: getPastIso(11),
+    },
+    {
+      day: 2,
+      text: "Solid 45-minute dumbbell lifting and core training session.",
+      mood: 'good',
+      scores: { physique: 4, health: 3, mental_health: 2, intelligence: 0 },
+      xpChanges: { physique: 40, health: 30, mental_health: 20, intelligence: 0 },
+      levelUps: [],
+      summary: "Training • Workout",
+      activityScene: "character working out",
+      imageUrl: ACTIVITY_IMAGES.workout,
+      createdAt: getPastIso(12),
+    },
+    {
+      day: 1,
+      text: "Began my journey on Ethos. Outlined core daily goals and habits.",
+      mood: 'good',
+      scores: { physique: 2, health: 2, mental_health: 3, intelligence: 2 },
+      xpChanges: { physique: 20, health: 20, mental_health: 30, intelligence: 20 },
+      levelUps: [],
+      summary: "Genesis • Start",
+      activityScene: "character starting journey",
+      imageUrl: ACTIVITY_IMAGES.workout,
+      createdAt: getPastIso(13),
+    },
+  ];
+
+  const moods: Record<number, MoodType> = {};
+  logs.forEach((l) => {
+    if (l.mood) moods[l.day] = l.mood as MoodType;
+  });
+
+  return {
+    currentDay: 15,
+    stats,
+    logs,
+    moods,
+    xpNeeded: xpNeededMap,
+    characterLevel: characterLevel(stats),
+    currentMood: null,
+    selectedCharacter: 'ch_1',
+    tasks: [
+      { id: '1', title: 'Prepare for exam', completed: false, statReward: 'intelligence' },
+      { id: '2', title: 'Wash the dishes', completed: false, statReward: 'health' },
+      { id: '3', title: 'Complete the app', completed: false, statReward: 'intelligence' },
+      { id: '4', title: 'Learn Japanese', completed: false, statReward: 'intelligence' },
+      { id: '5', title: 'Website', completed: true, statReward: 'intelligence' },
+      { id: '6', title: 'Clean', completed: false, statReward: 'health' },
+      { id: '7', title: 'Haircut', completed: true, statReward: 'mental_health' },
+      { id: '8', title: 'School', completed: true, statReward: 'intelligence' },
+    ],
+  };
+}
+
+/**
+ * Fresh default state initialized with 2-week testing data.
+ */
+export function defaultState(): AppState {
+  return createTwoWeekDemoState();
 }
 
 /**
@@ -90,6 +305,7 @@ export function defaultState(): AppState {
 export function deriveState(raw: Partial<AppState>): AppState {
   const currentDay = Math.max(1, typeof raw.currentDay === 'number' ? raw.currentDay : 1);
   const rawStats = (raw.stats || {}) as Partial<Record<StatName, StatData>>;
+  const rawPhysique = rawStats.physique || (rawStats as any).strength;
 
   const stats: Record<StatName, StatData> = {
     health: {
@@ -104,9 +320,9 @@ export function deriveState(raw: Partial<AppState>): AppState {
       level: Math.max(1, rawStats.mental_health?.level ?? 1),
       xp: Math.max(0, rawStats.mental_health?.xp ?? 0),
     },
-    strength: {
-      level: Math.max(1, rawStats.strength?.level ?? 1),
-      xp: Math.max(0, rawStats.strength?.xp ?? 0),
+    physique: {
+      level: Math.max(1, rawPhysique?.level ?? 1),
+      xp: Math.max(0, rawPhysique?.xp ?? 0),
     },
   };
 
@@ -114,7 +330,7 @@ export function deriveState(raw: Partial<AppState>): AppState {
     health: xpNeeded(stats.health.level),
     intelligence: xpNeeded(stats.intelligence.level),
     mental_health: xpNeeded(stats.mental_health.level),
-    strength: xpNeeded(stats.strength.level),
+    physique: xpNeeded(stats.physique.level),
   };
 
   const logs: LogEntry[] = Array.isArray(raw.logs) ? raw.logs : [];
@@ -126,6 +342,15 @@ export function deriveState(raw: Partial<AppState>): AppState {
     raw.currentMood ||
     null;
 
+  const selectedChar = (raw.selectedCharacter as CharacterType) || 'ch_1';
+
+  const tasks: TaskItem[] = Array.isArray(raw.tasks) && raw.tasks.length > 0 ? raw.tasks : [
+    { id: '1', title: 'Prepare for exam', completed: false, statReward: 'intelligence' },
+    { id: '2', title: 'Wash the dishes', completed: false, statReward: 'health' },
+    { id: '3', title: 'Complete the app', completed: false, statReward: 'intelligence' },
+    { id: '4', title: 'Learn Japanese', completed: false, statReward: 'intelligence' },
+  ];
+
   return {
     currentDay,
     stats,
@@ -134,5 +359,7 @@ export function deriveState(raw: Partial<AppState>): AppState {
     xpNeeded: xpNeededMap,
     characterLevel: characterLevel(stats),
     currentMood,
+    selectedCharacter: selectedChar,
+    tasks,
   };
 }

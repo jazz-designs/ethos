@@ -15,11 +15,11 @@ console.log('  ✓ xpNeeded OK');
 // ── Single level-up ─────────────────────────────────────────────────────
 console.log('Testing single level-up...');
 // Level 1, 0 XP, score +10 = 100 XP → exactly reaches L2
-const r1 = applyXp('strength', 1, 0, 10);
+const r1 = applyXp('physique', 1, 0, 10);
 assert.strictEqual(r1.level, 2);
 assert.strictEqual(r1.xp, 0);
 assert.strictEqual(r1.xpChange, 100);
-assert.deepStrictEqual(r1.levelUps, [{ stat: 'strength', newLevel: 2 }]);
+assert.deepStrictEqual(r1.levelUps, [{ stat: 'physique', newLevel: 2 }]);
 
 // Level 1, 90 XP, score +10 → 190 XP → L2 (190-100=90, 90<115)
 const r2 = applyXp('health', 1, 90, 10);
@@ -49,7 +49,7 @@ assert.strictEqual(r4.xp, 0, 'xp floors at 0');
 assert.strictEqual(r4.levelUps.length, 0);
 
 // Level 1, 0 XP, score -5 → 0-50=-50 → clamp to 0
-const r5 = applyXp('strength', 1, 0, -5);
+const r5 = applyXp('physique', 1, 0, -5);
 assert.strictEqual(r5.level, 1);
 assert.strictEqual(r5.xp, 0);
 
@@ -65,7 +65,7 @@ const state = defaultState();
 assert.strictEqual(characterLevel(state.stats), 1, 'default = 1');
 
 state.stats.health.level = 3;
-state.stats.strength.level = 2;
+state.stats.physique.level = 2;
 state.stats.intelligence.level = 4;
 state.stats.mental_health.level = 3;
 // (3+2+4+3)/4 = 3.0 → floor = 3

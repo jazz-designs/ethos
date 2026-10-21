@@ -1,8 +1,8 @@
-export type StatName = 'health' | 'intelligence' | 'mental_health' | 'strength';
+export type StatName = 'health' | 'intelligence' | 'mental_health' | 'physique';
 
 export type MoodType = 'worst' | 'bad' | 'neutral' | 'good' | 'excellent';
 
-export type CharacterType = 'mage' | 'monk' | 'ranger' | 'warrior';
+export type CharacterType = 'ch_1' | 'ch_2' | 'ch_3' | 'ch_4';
 
 export interface StatData {
   level: number;
@@ -14,6 +14,13 @@ export interface LevelUpEvent {
   newLevel: number;
 }
 
+export interface TaskItem {
+  id: string;
+  title: string;
+  completed: boolean;
+  statReward?: StatName;
+}
+
 export interface LogEntry {
   day: number;
   text: string;
@@ -22,6 +29,8 @@ export interface LogEntry {
   xpChanges: Record<StatName, number>;
   levelUps: LevelUpEvent[];
   summary?: string;
+  activityScene?: string;
+  imageUrl?: string | null;
   createdAt: string;
 }
 
@@ -33,9 +42,11 @@ export interface AppState {
   xpNeeded: Record<StatName, number>;
   characterLevel: number;
   currentMood?: MoodType | string | null;
+  selectedCharacter?: CharacterType;
+  tasks?: TaskItem[];
 }
 
-export type TabType = 'today' | 'progress' | 'chronicles' | 'hero';
+export type TabType = 'home' | 'tasks' | 'journal' | 'insights';
 
 export interface MoodOption {
   id: MoodType;

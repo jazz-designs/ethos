@@ -2,35 +2,36 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
-import * as Haptics from 'expo-haptics';
-import { Theme } from '../theme';
 import { LogEntry, StatName, MoodType } from '../types';
-import { MOOD_IMAGES, STAT_IMAGES } from '../assets';
+import { MOOD_IMAGES, ACTIVITY_IMAGES } from '../assets';
 
 interface ChroniclesScreenProps {
   logs: LogEntry[];
+  onPressProfile?: () => void;
 }
 
+const MOOD_COLORS: Record<MoodType, string> = {
+  worst: '#FFD5D7',
+  bad: '#FCF2E8',
+  neutral: '#E5DEFF',
+  good: '#E9F6ED',
+  excellent: '#E7F1FD',
+};
+
 const STAT_CONFIG: Record<StatName, { label: string; color: string; bg: string }> = {
-  health: { label: 'Health', color: Theme.colors.roseDark, bg: Theme.colors.roseLight },
-  intelligence: { label: 'Intelligence', color: Theme.colors.purpleDark, bg: Theme.colors.purpleLight },
-  mental_health: { label: 'Mental Health', color: Theme.colors.mintDark, bg: Theme.colors.mintLight },
-  strength: { label: 'Strength', color: Theme.colors.orangeDark, bg: Theme.colors.orangeLight },
+  physique: { label: 'Physique', color: '#6F7983', bg: '#FFD5D8' },
+  intelligence: { label: 'Intelligence', color: '#6F7983', bg: '#E7F1FD' },
+  health: { label: 'Health', color: '#6F7983', bg: '#E9F6ED' },
+  mental_health: { label: 'Mental Health', color: '#6F7983', bg: '#FCF2E8' },
 };
 
-const MOOD_META: Record<MoodType, { label: string; color: string; bg: string }> = {
-  worst: { label: 'Worst', color: Theme.colors.roseDark, bg: Theme.colors.roseLight },
-  bad: { label: 'Bad', color: Theme.colors.orangeDark, bg: Theme.colors.orangeLight },
-  neutral: { label: 'Neutral', color: Theme.colors.purpleDark, bg: Theme.colors.purpleLight },
-  good: { label: 'Good', color: Theme.colors.mintDark, bg: Theme.colors.mintLight },
-  excellent: { label: 'Excellent', color: Theme.colors.goldDark, bg: Theme.colors.goldLight },
-};
-
-export const ChroniclesScreen: React.FC<ChroniclesScreenProps> = ({ logs }) => {
+export const ChroniclesScreen: React.FC<ChroniclesScreenProps> = ({
+  logs,
+  onPressProfile,
+}) => {
   const [expandedDays, setExpandedDays] = useState<Set<number>>(new Set());
 
   const toggleDay = (day: number) => {
-    Haptics.selectionAsync();
     setExpandedDays((prev) => {
       const next = new Set(prev);
       if (next.has(day)) next.delete(day);
@@ -41,374 +42,389 @@ export const ChroniclesScreen: React.FC<ChroniclesScreenProps> = ({ logs }) => {
 
   const sortedLogs = [...logs].sort((a, b) => b.day - a.day);
 
+  // Helper to get formatted day number and month
+  const getDateInfo = (log: LogEntry, index: number) => {
+    if (log.createdAt) {
+      try {
+        const d = new Date(log.createdAt);
+        if (!isNaN(d.getTime())) {
+          const dayNum = d.getDate();
+          const monthStr = d.toLocaleString('en-US', { month: 'short' }).toUpperCase();
+          return { dayNum, monthStr };
+        }
+      } catch {}
+    }
+    // Fallback: calculate from day
+    const dayNum = Math.max(1, 10 - index > 0 ? 10 - index : log.day);
+    return { dayNum, monthStr: 'JAN' };
+  };
+
+  // Helper to get caption as a clean 2-word phrase
+  const getCaption = (log: LogEntry) => {
+    if (log.summary && log.summary.includes('•')) {
+      return log.summary.trim();
+    }
+    if (log.summary) {
+      if (log.summary.length <= 25) return log.summary.trim();
+      const words = log.summary.replace(/[.,!?;]/g, '').split(/\s+/).slice(0, 2);
+      return words.join(' • ');
+    }
+    if (log.activityScene) {
+      const words = log.activityScene.replace(/character\s+/i, '').split(/\s+/).slice(0, 2);
+      return words.join(' • ');
+    }
+    return 'Board • Worked out';
+  };
+
+  // Helper to get image source
+  const getImageSource = (log: LogEntry, index: number) => {
+    if (log.imageUrl) {
+      if (typeof log.imageUrl === 'string') {
+        return { uri: log.imageUrl };
+      }
+      return log.imageUrl;
+    }
+    // Fallback cycling through the 4 user images
+    const fallbackImgs = [
+      ACTIVITY_IMAGES.workout,
+      ACTIVITY_IMAGES.dance,
+      ACTIVITY_IMAGES.couch,
+      ACTIVITY_IMAGES.first,
+    ];
+    return fallbackImgs[index % fallbackImgs.length];
+  };
+
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      {/* Screen Header */}
+    <View style={styles.container}>
+      {/* Header matching journal.png */}
       <View style={styles.header}>
-        <View>
-          <Text style={styles.title}>Chronicles</Text>
-          <Text style={styles.subtitle}>Daily Feats & Journey Log</Text>
-        </View>
-        <View style={styles.countBadge}>
-          <Text style={styles.countText}>{logs.length} Days</Text>
-        </View>
+        <Text style={styles.title}>Journal</Text>
+        <Pressable
+          style={({ pressed }) => [
+            styles.profileButton,
+            pressed && { opacity: 0.8, transform: [{ scale: 0.95 }] },
+          ]}
+          onPress={onPressProfile}
+        >
+          <Ionicons name="person-outline" size={20} color="#2C3036" />
+        </Pressable>
       </View>
 
-      {logs.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <Ionicons name="book-outline" size={44} color={Theme.colors.purple} style={{ marginBottom: 12 }} />
-          <Text style={styles.emptyTitle}>The Archives Are Silent</Text>
-          <Text style={styles.emptyText}>
-            Log your day on the Today tab to begin your permanent record.
-          </Text>
-        </View>
-      ) : (
-        <View style={styles.logList}>
-          {sortedLogs.map((log) => {
-            const isExpanded = expandedDays.has(log.day);
+      {/* Journal Timeline Stream */}
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {sortedLogs.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <Ionicons name="book-outline" size={44} color="#6F7983" style={{ marginBottom: 12 }} />
+            <Text style={styles.emptyTitle}>Your Journal is Empty</Text>
+            <Text style={styles.emptySubtitle}>
+              Check in with your mood and log your day to start your story.
+            </Text>
+          </View>
+        ) : (
+          sortedLogs.map((log, index) => {
+            const { dayNum, monthStr } = getDateInfo(log, index);
             const moodKey = (log.mood as MoodType) || 'good';
-            const moodMeta = MOOD_META[moodKey] || MOOD_META.good;
+            const isExpanded = expandedDays.has(log.day);
+            const imageSource = getImageSource(log, index);
+            const caption = getCaption(log);
+            // Alternate tilt: even index tilts left (-3.5deg), odd index tilts right (+3.5deg)
+            const rotationDegree = index % 2 === 0 ? '-3.5deg' : '3.5deg';
 
             return (
               <Pressable
                 key={log.day}
                 style={({ pressed }) => [
-                  styles.logCard,
-                  pressed && { opacity: 0.9, transform: [{ scale: 0.99 }] },
+                  styles.entryCard,
+                  pressed && { opacity: 0.95, transform: [{ scale: 0.995 }] },
                 ]}
                 onPress={() => toggleDay(log.day)}
               >
-                {/* Card Header */}
-                <View style={styles.cardHeader}>
-                  <View style={styles.dayBadge}>
-                    <Text style={styles.dayBadgeText}>Day {log.day}</Text>
+                {/* ── Left Column: Day Num, Month, and pure Mood SVG at bottom ── */}
+                <View style={styles.leftCol}>
+                  <View style={styles.dateTopGroup}>
+                    <Text style={styles.dayNumText}>{dayNum}</Text>
+                    <Text style={styles.monthText}>{monthStr}</Text>
                   </View>
 
-                  {log.mood && MOOD_IMAGES[moodKey] && (
-                    <View style={[styles.moodPill, { backgroundColor: moodMeta.bg }]}>
+                  {/* Pure mood emoji - NO background circle */}
+                  <View style={styles.moodBottomWrapper}>
+                    {MOOD_IMAGES[moodKey] && (
                       <Image
                         source={MOOD_IMAGES[moodKey]}
-                        style={styles.moodIcon}
+                        style={styles.leftColMoodSvg}
                         contentFit="contain"
                       />
-                      <Text style={[styles.moodText, { color: moodMeta.color }]}>
-                        {moodMeta.label}
-                      </Text>
-                    </View>
-                  )}
-
-                  <View style={styles.expandIcon}>
-                    <Ionicons
-                      name={isExpanded ? 'chevron-up' : 'chevron-down'}
-                      size={18}
-                      color={Theme.colors.textMuted}
-                    />
+                    )}
                   </View>
                 </View>
 
-                {/* Journal Entry Preview (User's input) */}
-                {!isExpanded && (
-                  <Text style={styles.summaryText} numberOfLines={2}>
-                    "{log.text}"
-                  </Text>
-                )}
+                {/* ── Vertical Divider Line ── */}
+                <View style={styles.verticalDivider} />
 
-                {/* Scores Row */}
-                <View style={styles.scoresRow}>
-                  {(['health', 'intelligence', 'mental_health', 'strength'] as StatName[]).map((stat) => {
-                    const score = log.scores[stat] ?? 0;
-                    const isPositive = score >= 0;
-                    const meta = STAT_CONFIG[stat];
-
-                    return (
-                      <View key={stat} style={[styles.scoreChip, { backgroundColor: meta.bg }]}>
-                        <Image
-                          source={STAT_IMAGES[stat]}
-                          style={styles.chipStatIcon}
-                          contentFit="contain"
-                        />
-                        <Text
-                          style={[
-                            styles.chipScore,
-                            { color: isPositive ? Theme.colors.mintDark : Theme.colors.roseDark },
-                          ]}
-                        >
-                          {isPositive ? `+${score}` : score}
-                        </Text>
-                      </View>
-                    );
-                  })}
-                </View>
-
-                {/* Expanded Details */}
-                {isExpanded && (
-                  <View style={styles.expandedContent}>
-                    <View style={styles.divider} />
-
-                    <Text style={styles.sectionLabel}>Your Entry:</Text>
-                    <View style={styles.quoteBox}>
-                      <Text style={styles.quoteText}>{log.text}</Text>
+                {/* ── Right Section: Tilted Top-Cropped Card & 2-Word Phrase ── */}
+                <View style={styles.rightSection}>
+                  {/* Top: Tilted Card cropped to the top part */}
+                  <View style={styles.tiltedCardContainer}>
+                    <View
+                      style={[
+                        styles.tiltedCard,
+                        { transform: [{ rotate: rotationDegree }] },
+                      ]}
+                    >
+                      <Image
+                        source={imageSource}
+                        style={styles.tiltedImage}
+                        contentFit="cover"
+                        contentPosition="top"
+                        transition={200}
+                      />
                     </View>
+                  </View>
 
-                    <Text style={styles.sectionLabel}>XP Impact:</Text>
-                    <View style={styles.xpGrid}>
-                      {(['health', 'intelligence', 'mental_health', 'strength'] as StatName[]).map((stat) => {
-                        const xpChange = log.xpChanges[stat] ?? 0;
-                        const isPos = xpChange >= 0;
-                        const meta = STAT_CONFIG[stat];
+                  {/* Horizontal Divider Line */}
+                  <View style={styles.horizontalDivider} />
 
-                        return (
-                          <View key={stat} style={styles.xpCard}>
-                            <Text style={styles.xpCardLabel}>{meta.label}</Text>
-                            <Text
-                              style={[
-                                styles.xpCardValue,
-                                { color: isPos ? Theme.colors.mintDark : Theme.colors.roseDark },
-                              ]}
-                            >
-                              {isPos ? `+${xpChange}` : xpChange} XP
-                            </Text>
-                          </View>
-                        );
-                      })}
-                    </View>
-
-                    {log.levelUps.length > 0 && (
-                      <View style={styles.levelUpNotice}>
-                        <Ionicons name="trophy" size={16} color={Theme.colors.goldDark} />
-                        <View style={{ flex: 1 }}>
-                          {log.levelUps.map((lu, idx) => (
-                            <Text key={idx} style={styles.levelUpText}>
-                              🎉 {lu.stat.toUpperCase()} reached Level {lu.newLevel}!
-                            </Text>
-                          ))}
-                        </View>
-                      </View>
-                    )}
-
-                    <Text style={styles.timestampText}>
-                      {new Date(log.createdAt).toLocaleDateString()} at{' '}
-                      {new Date(log.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  {/* Bottom: Centered 2-Word Phrase (e.g. "Board • Worked out") */}
+                  <View style={styles.captionContainer}>
+                    <Text style={styles.captionText} numberOfLines={1}>
+                      {caption}
                     </Text>
                   </View>
-                )}
+
+                  {/* Optional Expanded Drawer on click: Scores Breakdown */}
+                  {isExpanded && (
+                    <View style={styles.expandedContent}>
+                      <View style={styles.horizontalDivider} />
+                      <Text style={styles.expandedEntryText}>"{log.text}"</Text>
+
+                      <View style={styles.scoresRow}>
+                        {(['physique', 'intelligence', 'health', 'mental_health'] as StatName[]).map(
+                          (stat) => {
+                            const score = log.scores[stat] ?? 0;
+                            const isPositive = score >= 0;
+                            const meta = STAT_CONFIG[stat];
+
+                            return (
+                              <View
+                                key={stat}
+                                style={[styles.scoreChip, { backgroundColor: meta.bg }]}
+                              >
+                                <Text style={styles.scoreChipLabel}>{meta.label}</Text>
+                                <Text
+                                  style={[
+                                    styles.scoreChipVal,
+                                    { color: isPositive ? '#48A868' : '#E06D6D' },
+                                  ]}
+                                >
+                                  {isPositive ? `+${score}` : `${score}`}
+                                </Text>
+                              </View>
+                            );
+                          }
+                        )}
+                      </View>
+                    </View>
+                  )}
+                </View>
               </Pressable>
             );
-          })}
-        </View>
-      )}
-
-      <View style={{ height: 110 }} />
-    </ScrollView>
+          })
+        )}
+      </ScrollView>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Theme.colors.background,
-  },
-  content: {
-    paddingHorizontal: 18,
-    paddingTop: 8,
-    gap: 16,
+    backgroundColor: '#FFFFFF',
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 4,
+    paddingHorizontal: 24,
+    paddingTop: 12,
+    paddingBottom: 16,
   },
   title: {
-    fontSize: 26,
-    fontWeight: '900',
-    color: Theme.colors.textPrimary,
-    letterSpacing: -0.5,
-  },
-  subtitle: {
-    fontSize: 13,
-    color: Theme.colors.textMuted,
-    marginTop: 2,
-  },
-  countBadge: {
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: Theme.radii.full,
-    borderCurve: 'continuous',
-    ...Theme.shadows.subtle,
-  },
-  countText: {
-    fontSize: 12,
+    fontSize: 32,
     fontWeight: '800',
-    color: Theme.colors.purpleDark,
+    color: '#2C3036',
+    letterSpacing: -0.6,
   },
-  emptyContainer: {
+  profileButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: '#FFFFFF',
-    borderRadius: Theme.radii.xl,
-    borderCurve: 'continuous',
-    padding: 36,
+    borderWidth: 1.5,
+    borderColor: '#ECEFF1',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 20,
-    ...Theme.shadows.card,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2,
   },
-  emptyEmoji: {
-    fontSize: 44,
-    marginBottom: 12,
+  scroll: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingHorizontal: 20,
+    paddingBottom: 130,
+    gap: 16,
+  },
+  emptyContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 80,
+    paddingHorizontal: 30,
   },
   emptyTitle: {
-    fontSize: 17,
+    fontSize: 18,
     fontWeight: '800',
-    color: Theme.colors.textPrimary,
+    color: '#2C3036',
     marginBottom: 6,
   },
-  emptyText: {
-    fontSize: 13,
-    color: Theme.colors.textMuted,
+  emptySubtitle: {
+    fontSize: 14,
+    color: '#6F7983',
     textAlign: 'center',
     lineHeight: 20,
   },
-  logList: {
-    gap: 12,
-  },
-  logCard: {
+  entryCard: {
+    flexDirection: 'row',
     backgroundColor: '#FFFFFF',
-    borderRadius: Theme.radii.xl,
-    borderCurve: 'continuous',
-    padding: 18,
-    ...Theme.shadows.card,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: '#ECEFF1',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    elevation: 3,
   },
-  cardHeader: {
-    flexDirection: 'row',
+  leftCol: {
+    width: 68,
+    paddingTop: 16,
+    paddingBottom: 16,
+    paddingHorizontal: 6,
     alignItems: 'center',
-    gap: 10,
-    marginBottom: 10,
+    justifyContent: 'space-between',
   },
-  dayBadge: {
-    backgroundColor: Theme.colors.purpleLight,
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderRadius: Theme.radii.full,
-  },
-  dayBadgeText: {
-    fontSize: 12,
-    fontWeight: '900',
-    color: Theme.colors.purpleDark,
-  },
-  moodPill: {
-    flexDirection: 'row',
+  dateTopGroup: {
     alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: Theme.radii.full,
+    gap: 2,
   },
-  moodIcon: {
-    width: 14,
-    height: 14,
-  },
-  moodText: {
-    fontSize: 11,
+  dayNumText: {
+    fontSize: 28,
     fontWeight: '800',
+    color: '#2C3036',
+    letterSpacing: -0.5,
+    lineHeight: 32,
   },
-  expandIcon: {
-    marginLeft: 'auto',
+  monthText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#6F7983',
+    letterSpacing: 0.8,
   },
-  summaryText: {
+  moodBottomWrapper: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  leftColMoodSvg: {
+    width: 38,
+    height: 38,
+  },
+  verticalDivider: {
+    width: 1,
+    backgroundColor: '#ECEFF1',
+  },
+  rightSection: {
+    flex: 1,
+  },
+  tiltedCardContainer: {
+    height: 180,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+  },
+  tiltedCard: {
+    width: '88%',
+    height: 160,
+    borderRadius: 22,
+    backgroundColor: '#FFFFFF',
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.16,
+    shadowRadius: 14,
+    elevation: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.04)',
+  },
+  tiltedImage: {
+    width: '100%',
+    height: '100%',
+  },
+  horizontalDivider: {
+    height: 1,
+    backgroundColor: '#ECEFF1',
+    width: '100%',
+  },
+  captionContainer: {
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  captionText: {
+    fontSize: 14.5,
+    fontWeight: '700',
+    color: '#6F7983',
+    letterSpacing: -0.2,
+    textAlign: 'center',
+  },
+  expandedContent: {
+    padding: 14,
+    gap: 12,
+    backgroundColor: '#FAFBFC',
+  },
+  expandedEntryText: {
     fontSize: 13.5,
-    fontWeight: '600',
-    color: Theme.colors.textPrimary,
-    lineHeight: 20,
     fontStyle: 'italic',
-    marginBottom: 12,
+    color: '#2C3036',
+    lineHeight: 19,
   },
   scoresRow: {
     flexDirection: 'row',
-    gap: 6,
+    flexWrap: 'wrap',
+    gap: 8,
   },
   scoreChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: Theme.radii.full,
-  },
-  chipStatIcon: {
-    width: 12,
-    height: 12,
-  },
-  chipScore: {
-    fontSize: 11.5,
-    fontWeight: '900',
-  },
-  expandedContent: {
-    marginTop: 12,
-  },
-  divider: {
-    height: 1,
-    backgroundColor: Theme.colors.borderLight,
-    marginBottom: 12,
-  },
-  sectionLabel: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: Theme.colors.textMuted,
-    marginBottom: 6,
-    textTransform: 'uppercase',
-  },
-  quoteBox: {
-    backgroundColor: Theme.colors.backgroundSubtle,
-    borderRadius: Theme.radii.md,
-    padding: 12,
-    marginBottom: 12,
-  },
-  quoteText: {
-    fontSize: 13,
-    color: Theme.colors.textPrimary,
-    lineHeight: 20,
-  },
-  xpGrid: {
-    flexDirection: 'row',
     gap: 6,
-    marginBottom: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
   },
-  xpCard: {
-    flex: 1,
-    backgroundColor: Theme.colors.backgroundInput,
-    borderRadius: Theme.radii.sm,
-    padding: 8,
-    alignItems: 'center',
-  },
-  xpCardLabel: {
-    fontSize: 9.5,
+  scoreChipLabel: {
+    fontSize: 12,
     fontWeight: '700',
-    color: Theme.colors.textSecondary,
-    marginBottom: 2,
-    textAlign: 'center',
+    color: '#2C3036',
   },
-  xpCardValue: {
-    fontSize: 11.5,
-    fontWeight: '900',
-  },
-  levelUpNotice: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: Theme.colors.goldLight,
-    borderRadius: Theme.radii.md,
-    padding: 10,
-    marginBottom: 12,
-  },
-  levelUpText: {
+  scoreChipVal: {
     fontSize: 12,
     fontWeight: '800',
-    color: Theme.colors.goldDark,
-  },
-  timestampText: {
-    fontSize: 11,
-    color: Theme.colors.textMuted,
-    textAlign: 'right',
   },
 });

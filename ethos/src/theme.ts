@@ -1,54 +1,64 @@
 export const Theme = {
   colors: {
-    // Canvas & Surfaces (Warm Organic Cream from Screenshot)
-    background: '#F8F6F0',
+    // Canvas & Surfaces (Clean Minimal White from Design)
+    background: '#FFFFFF',
     backgroundPure: '#FFFFFF',
-    backgroundCard: '#FFFFFF',
-    backgroundSubtle: '#F0ECE1',
+    backgroundCard: '#F8F9FA',
+    backgroundSubtle: '#F4F5F7',
     backgroundInput: '#FFFFFF',
-    surfaceTonal: '#F4EFE6',
+    surfaceTonal: '#F8F9FA',
 
-    // Floating Dock (Signature Charcoal Slate from Screenshot)
-    dockBg: '#181922',
-    dockPillActive: '#2C2D3A',
-    dockIconInactive: '#858797',
-    dockIconActive: '#FFFFFF',
+    // Floating Dock (From Design: White pill dock with soft pink active oval)
+    dockBg: '#FFFFFF',
+    dockActivePill: '#F5E8E8',
+    dockTextActive: '#2C3036',
+    dockTextInactive: '#6F7983',
 
-    // Typography
-    textPrimary: '#17181F',
-    textSecondary: '#5E6072',
-    textMuted: '#9699A8',
+    // Typography & General Icons (From User: 6F7983 for icon and stats text, 2C3036 for primary titles)
+    textPrimary: '#2C3036',
+    textSecondary: '#6F7983',
+    textMuted: '#6F7983',
+    iconColor: '#6F7983',
     textLight: '#FFFFFF',
 
-    // Periwinkle Lavender (Wisdom / Intelligence & Top Banner Card)
+    // ── Exact Stat Colors from User ──────────────────────────────────────
+    physique: '#FFD5D8',
+    intelligence: '#E7F1FD',
+    health: '#E9F6ED',
+    mental_health: '#FCF2E8',
+
+    // Mood Pastel Palette (Matching Design Doodle Faces)
+    moodWorst: '#FFD5D7',
+    moodBad: '#FCF2E8',
+    moodNeutral: '#E5DEFF',
+    moodGood: '#E9F6ED',
+    moodExcellent: '#E7F1FD',
+
+    // Semantic Accents
+    successGreen: '#48A868',
+    dangerRed: '#E06D6D',
+
+    // Retained helpers
     purple: '#7C6EE6',
-    purpleLight: '#EFEBFF',
-    purpleDark: '#4A3CC4',
-
-    // Warm Tangerine (Strength & Badges from Screenshot)
+    purpleLight: '#E7F1FD',
+    purpleDark: '#6F7983',
     orange: '#F9733E',
-    orangeLight: '#FFF0EA',
-    orangeDark: '#D4531F',
-
-    // Seafoam Mint (Mental Health & Positive Gains)
+    orangeLight: '#FFD5D8',
+    orangeDark: '#6F7983',
     mint: '#24B69B',
-    mintLight: '#E3F8F2',
-    mintDark: '#16806C',
-
-    // Coral Rose (Health & Drops)
+    mintLight: '#E9F6ED',
+    mintDark: '#6F7983',
     rose: '#F5536B',
-    roseLight: '#FFEBF0',
-    roseDark: '#CB243F',
-
-    // Star Honey Gold (Level Ups & Excellent Mood)
+    roseLight: '#FFD5D8',
+    roseDark: '#6F7983',
     gold: '#F5A623',
-    goldLight: '#FEF6E6',
+    goldLight: '#FCF2E8',
     goldDark: '#B87B11',
 
     // Hairlines & Subtle Accents
-    border: '#EBE7DC',
-    borderLight: '#F3F0E6',
-    divider: '#EBE6DA',
+    border: '#EAECEF',
+    borderLight: '#F2F4F7',
+    divider: '#EAECEF',
   },
 
   // 4-Point Grid Spacing Scale

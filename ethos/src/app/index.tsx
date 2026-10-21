@@ -10,15 +10,27 @@ import {
   KeyboardAvoidingView,
   Platform,
   Keyboard,
+  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { API_BASE_URL } from '../config';
 import { Theme } from '../theme';
-import { AppState, CharacterType, LevelUpEvent, LogEntry, MoodType, StatName, TabType } from '../types';
+import {
+  AppState,
+  CharacterType,
+  LevelUpEvent,
+  LogEntry,
+  MoodType,
+  StatName,
+  TabType,
+  TaskItem,
+} from '../types';
 import { HeaderBar } from '../components/HeaderBar';
 import { HeroStatsSection } from '../components/HeroStatsSection';
 import { SleekJournalInput } from '../components/SleekJournalInput';
+import { UnfinishedTasksSection } from '../components/UnfinishedTasksSection';
+import { TasksScreen } from '../components/TasksScreen';
 import { ProgressScreen } from '../components/ProgressScreen';
 import { ChroniclesScreen } from '../components/ChroniclesScreen';
 import { HeroScreen } from '../components/HeroScreen';
@@ -28,8 +40,8 @@ import { loadLocalState, resetLocalState, saveLocalState } from '../storage';
 
 export default function HomeScreen() {
   const [state, setState] = useState<AppState | null>(null);
-  const [currentTab, setCurrentTab] = useState<TabType>('today');
-  const [character, setCharacter] = useState<CharacterType>('mage');
+  const [currentTab, setCurrentTab] = useState<TabType>('home');
+  const [character, setCharacter] = useState<CharacterType>('ch_1');
   const [text, setText] = useState('');
   const [selectedMood, setSelectedMood] = useState<MoodType | null>(null);
   const [loading, setLoading] = useState(false);
@@ -37,6 +49,7 @@ export default function HomeScreen() {
   const [lastResult, setLastResult] = useState<LogEntry | null>(null);
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const [isProfileModalVisible, setIsProfileModalVisible] = useState(false);
 
   const scrollViewRef = useRef<ScrollView>(null);
 
@@ -74,6 +87,9 @@ export default function HomeScreen() {
       try {
         const local = await loadLocalState();
         setState(local);
+        if (local.selectedCharacter) {
+          setCharacter(local.selectedCharacter);
+        }
         const todayLog = local.logs.find((l) => l.day === local.currentDay);
         setLastResult(todayLog ?? null);
 
@@ -120,7 +136,63 @@ export default function HomeScreen() {
     }
   };
 
-  // ── Evaluate Day Chronicle (Stateless Gemini evaluation + Client XP math) ──
+  // ── Character Selection ──────────────────────────────────────────────
+  const handleSelectCharacter = async (char: CharacterType) => {
+    setCharacter(char);
+    if (!state) return;
+    const nextState = deriveState({
+      ...state,
+      selectedCharacter: char,
+    });
+    setState(nextState);
+    try {
+      await saveLocalState(nextState);
+    } catch (err) {
+      console.warn('Could not persist character to local storage:', err);
+    }
+  };
+
+  // ── Task Completion Toggle ───────────────────────────────────────────
+  const handleToggleTask = async (taskId: string) => {
+    if (!state) return;
+    const currentTasks = state.tasks || [];
+    const updatedTasks = currentTasks.map((t) =>
+      t.id === taskId ? { ...t, completed: !t.completed } : t
+    );
+    const nextState = deriveState({
+      ...state,
+      tasks: updatedTasks,
+    });
+    setState(nextState);
+    try {
+      await saveLocalState(nextState);
+    } catch (err) {
+      console.warn('Could not persist task update:', err);
+    }
+  };
+
+  // ── Add New Task ─────────────────────────────────────────────────────
+  const handleAddTask = async (title: string) => {
+    if (!state || !title.trim()) return;
+    const currentTasks = state.tasks || [];
+    const newTask: TaskItem = {
+      id: Date.now().toString(),
+      title: title.trim(),
+      completed: false,
+    };
+    const nextState = deriveState({
+      ...state,
+      tasks: [...currentTasks, newTask],
+    });
+    setState(nextState);
+    try {
+      await saveLocalState(nextState);
+    } catch (err) {
+      console.warn('Could not persist new task:', err);
+    }
+  };
+
+  // ── Evaluate Day Chronicle (Stateless Gemini evaluation + Client XP math + AI Activity Scene) ──
   const handleEvaluate = async () => {
     if (!text.trim() || loading || !state) return;
     setLoading(true);
@@ -132,6 +204,7 @@ export default function HomeScreen() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           text: text.trim(),
+          character,
         }),
       });
 
@@ -151,7 +224,7 @@ export default function HomeScreen() {
         health: 0,
         intelligence: 0,
         mental_health: 0,
-        strength: 0,
+        physique: 0,
       };
       const allLevelUps: LevelUpEvent[] = [];
 
@@ -181,6 +254,9 @@ export default function HomeScreen() {
         scores,
         xpChanges,
         levelUps: allLevelUps,
+        summary: data.summary,
+        activityScene: data.activityScene,
+        imageUrl: data.imageUrl ?? null,
         createdAt: new Date().toISOString(),
       };
 
@@ -213,10 +289,13 @@ export default function HomeScreen() {
     setError(null);
     try {
       const nextDay = state.currentDay + 1;
+      // Delete finished tasks on day transition; carry over only unfinished tasks
+      const remainingTasks = (state.tasks || []).filter((t) => !t.completed);
       const nextState = deriveState({
         ...state,
         currentDay: nextDay,
         currentMood: null,
+        tasks: remainingTasks,
       });
 
       await saveLocalState(nextState);
@@ -248,7 +327,7 @@ export default function HomeScreen() {
               setText('');
               setSelectedMood(null);
               setError(null);
-              setCurrentTab('today');
+              setCurrentTab('home');
             } catch {
               setError('Failed to reset local data.');
             }
@@ -263,84 +342,178 @@ export default function HomeScreen() {
     return (
       <SafeAreaView style={styles.safe}>
         <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color={Theme.colors.purple} />
+          <ActivityIndicator size="large" color="#2C3036" />
           <Text style={styles.loadingText}>Awakening Ethos...</Text>
         </View>
       </SafeAreaView>
     );
   }
 
-  // Calculate bottom padding based on keyboard height so input box stays fully above keyboard
-  const bottomPadding = isKeyboardVisible
-    ? Math.max(keyboardHeight, 280) + 60
+  // Calculate bottom padding so unfinished tasks can scroll cleanly above the floating mood tracker
+  const effectiveKeyboardHeight = keyboardHeight > 0 ? keyboardHeight : 290;
+  const bottomPadding = !dayLogged
+    ? (isKeyboardVisible ? effectiveKeyboardHeight + 80 : 180)
     : 130;
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
       <KeyboardAvoidingView
         style={styles.keyboardContainer}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={undefined}
       >
-        {currentTab === 'today' && (
-          <ScrollView
-            ref={scrollViewRef}
-            style={styles.scroll}
-            contentContainerStyle={[
-              styles.scrollContent,
-              { paddingBottom: bottomPadding },
-            ]}
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
-            keyboardDismissMode="on-drag"
-          >
-            {/* 1. Header */}
-            <HeaderBar day={state.currentDay} />
+        {/* ── HOME TAB (home-1.png & home-2.png) ── */}
+        {currentTab === 'home' && (
+          <View style={styles.homeTabWrapper}>
+            <ScrollView
+              ref={scrollViewRef}
+              style={styles.scroll}
+              contentContainerStyle={[
+                styles.scrollContent,
+                { paddingBottom: bottomPadding },
+              ]}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
+            >
+              {/* 1. Header with greeting and profile avatar button */}
+              <HeaderBar
+                day={state.currentDay}
+                onPressProfile={() => setIsProfileModalVisible(true)}
+              />
 
-            {/* 2. Hero + Stacked Stats Section */}
-            <HeroStatsSection
-              character={character}
-              stats={state.stats}
-              xpNeeded={state.xpNeeded}
-            />
+              {/* 2. Hero + Stacked Stats Section (New character & exact user colors) */}
+              {(() => {
+                const todayLog =
+                  state.logs.find((l) => l.day === state.currentDay) ||
+                  (lastResult?.day === state.currentDay ? lastResult : null);
+                return (
+                  <HeroStatsSection
+                    character={character}
+                    stats={state.stats}
+                    xpNeeded={state.xpNeeded}
+                    dailyImageUrl={todayLog?.imageUrl}
+                    dailyActivityScene={todayLog?.activityScene}
+                    xpDeltas={lastResult?.scores || state.logs[0]?.scores}
+                  />
+                );
+              })()}
 
-            {/* 3. Frictionless Rounded Input with Send Icon & Pop-up Mood Selector */}
-            <SleekJournalInput
-              day={state.currentDay}
-              text={text}
-              onChangeText={setText}
-              selectedMood={selectedMood}
-              onSelectMood={handleSelectMood}
-              loading={loading}
-              dayLogged={dayLogged}
-              onEvaluate={handleEvaluate}
-              lastResult={lastResult}
-              onNextDay={handleNextDay}
-              error={error}
-              onFocus={() => {
-                setTimeout(() => {
-                  scrollViewRef.current?.scrollToEnd({ animated: true });
-                }, 100);
-                setTimeout(() => {
-                  scrollViewRef.current?.scrollToEnd({ animated: true });
-                }, 300);
-              }}
-            />
-          </ScrollView>
+              {/* 3. Unfinished Tasks Section */}
+              <UnfinishedTasksSection
+                tasks={state.tasks || []}
+                onToggleTask={handleToggleTask}
+                onPressSeeAll={() => setCurrentTab('tasks')}
+              />
+
+              {/* 4. If day is evaluated, show Verdict Result Card right in the scroll flow */}
+              {dayLogged && (
+                <SleekJournalInput
+                  mode="resultOnly"
+                  day={state.currentDay}
+                  text={text}
+                  onChangeText={setText}
+                  selectedMood={selectedMood}
+                  onSelectMood={handleSelectMood}
+                  loading={loading}
+                  dayLogged={dayLogged}
+                  onEvaluate={handleEvaluate}
+                  lastResult={lastResult}
+                  onNextDay={handleNextDay}
+                  error={error}
+                />
+              )}
+            </ScrollView>
+
+            {/* 5. Mood Tracker / Journal Input floating pinned above menu bar (and above keyboard when typing) */}
+            {!dayLogged && (
+              <View
+                style={[
+                  styles.floatingActionBar,
+                  { bottom: isKeyboardVisible ? effectiveKeyboardHeight + 12 : 88 },
+                ]}
+              >
+                <SleekJournalInput
+                  mode="floatingBar"
+                  day={state.currentDay}
+                  text={text}
+                  onChangeText={setText}
+                  selectedMood={selectedMood}
+                  onSelectMood={handleSelectMood}
+                  loading={loading}
+                  dayLogged={dayLogged}
+                  onEvaluate={handleEvaluate}
+                  lastResult={lastResult}
+                  onNextDay={handleNextDay}
+                  error={error}
+                />
+              </View>
+            )}
+          </View>
         )}
 
-        {currentTab === 'progress' && <ProgressScreen state={state} />}
+        {/* ── TASKS TAB (tasks.png) ── */}
+        {currentTab === 'tasks' && (
+          <TasksScreen
+            tasks={state.tasks || []}
+            onToggleTask={handleToggleTask}
+            onAddTask={handleAddTask}
+            onPressProfile={() => setIsProfileModalVisible(true)}
+          />
+        )}
 
-        {currentTab === 'chronicles' && <ChroniclesScreen logs={state.logs} />}
+        {/* ── JOURNAL CHRONICLES TAB (journal.png) ── */}
+        {currentTab === 'journal' && (
+          <ChroniclesScreen
+            logs={state.logs}
+            onPressProfile={() => setIsProfileModalVisible(true)}
+          />
+        )}
 
-        {currentTab === 'hero' && (
+        {/* ── INSIGHTS TAB (insights.png) ── */}
+        {currentTab === 'insights' && (
+          <ProgressScreen
+            state={state}
+            onPressProfile={() => setIsProfileModalVisible(true)}
+          />
+        )}
+      </KeyboardAvoidingView>
+
+      {/* Floating Menu Bar (hidden when keyboard is open) */}
+      {!isKeyboardVisible && (
+        <FloatingDock currentTab={currentTab} onSelectTab={setCurrentTab} />
+      )}
+
+      {/* Hero Profile & Settings Modal */}
+      <Modal
+        visible={isProfileModalVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setIsProfileModalVisible(false)}
+      >
+        <SafeAreaView style={styles.modalSafe}>
+          <View style={styles.modalHeaderBar}>
+            <Text style={styles.modalHeaderTitle}>Hero Archetype</Text>
+            <TouchableOpacity
+              style={styles.modalCloseButton}
+              onPress={() => setIsProfileModalVisible(false)}
+            >
+              <Ionicons name="close" size={24} color="#2C3036" />
+            </TouchableOpacity>
+          </View>
           <HeroScreen
             state={state}
             selectedCharacter={character}
-            onSelectCharacter={setCharacter}
-            onReset={handleReset}
+            onSelectCharacter={handleSelectCharacter}
+            onReset={() => {
+              setIsProfileModalVisible(false);
+              handleReset();
+            }}
             apiBaseUrl={API_BASE_URL}
             onImportState={(restored) => {
               setState(restored);
+              if (restored.selectedCharacter) {
+                setCharacter(restored.selectedCharacter);
+              }
               const todayLog = restored.logs.find((l) => l.day === restored.currentDay);
               setLastResult(todayLog ?? null);
               if (todayLog?.mood) {
@@ -352,13 +525,8 @@ export default function HomeScreen() {
               }
             }}
           />
-        )}
-      </KeyboardAvoidingView>
-
-      {/* 4. Animated Minimalist Floating Dock (hidden when typing) */}
-      {!isKeyboardVisible && (
-        <FloatingDock currentTab={currentTab} onSelectTab={setCurrentTab} />
-      )}
+        </SafeAreaView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -366,7 +534,7 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: Theme.colors.background,
+    backgroundColor: '#FFFFFF',
   },
   keyboardContainer: {
     flex: 1,
@@ -377,21 +545,54 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: 24,
   },
+  homeTabWrapper: {
+    flex: 1,
+    position: 'relative',
+  },
+  floatingActionBar: {
+    position: 'absolute',
+    left: 12,
+    right: 12,
+    zIndex: 99,
+  },
   scroll: {
     flex: 1,
   },
   scrollContent: {
     paddingTop: 4,
-    gap: 12,
-  },
-  loadingContainer: {
-    alignItems: 'center',
-    gap: 12,
+    gap: 16,
   },
   loadingText: {
     fontSize: 14,
     fontWeight: '700',
-    color: Theme.colors.textSecondary,
+    color: '#6F7983',
     marginTop: 12,
   },
+  modalSafe: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
+  modalHeaderBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F2F4',
+  },
+  modalHeaderTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#2C3036',
+  },
+  modalCloseButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#F8F9FA',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 });
+

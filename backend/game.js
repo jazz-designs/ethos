@@ -1,6 +1,6 @@
 'use strict';
 
-const STAT_NAMES = ['health', 'intelligence', 'mental_health', 'strength'];
+const STAT_NAMES = ['health', 'intelligence', 'mental_health', 'physique'];
 
 /**
  * XP needed to go from level L to L+1.
