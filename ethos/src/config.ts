@@ -1,26 +1,27 @@
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 
-// API base URL for the Ethos backend.
-// Automatically detects your computer's local IP address from Expo bundler,
-// and falls back to your active LAN IP (192.168.1.72).
+// Production Render URL
+const RENDER_API_URL = 'https://ethos-inr7.onrender.com';
+
 const getApiBaseUrl = (): string => {
-  // Expo Go / Dev Client provides hostUri (e.g. "192.168.1.72:8081")
+  // If explicitly in production build, always use Render
+  if (!__DEV__) {
+    return RENDER_API_URL;
+  }
+
+  // In development, you can toggle between Render or local testing
+  // Default to Render URL so mobile builds / Expo Go directly test against Render
+  return RENDER_API_URL;
+
+  /* Local dev fallback if ever needed:
   const hostUri = Constants.expoConfig?.hostUri;
   if (hostUri) {
     const ip = hostUri.split(':')[0];
-    if (ip) {
-      return `http://${ip}:3000`;
-    }
+    if (ip) return `http://${ip}:3000`;
   }
-
-  // Fallback for Android Emulator (when not on physical device)
-  if (Platform.OS === 'android' && !Constants.isDevice) {
-    return 'http://10.0.2.2:3000';
-  }
-
-  // Current active LAN IP for physical phone connection
   return 'http://192.168.1.72:3000';
+  */
 };
 
 export const API_BASE_URL = getApiBaseUrl();
