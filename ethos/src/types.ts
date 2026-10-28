@@ -18,8 +18,29 @@ export interface TaskItem {
   id: string;
   title: string;
   completed: boolean;
-  statReward?: StatName;
+  type?: 'task' | 'habit';
+  statReward?: StatName; // legacy single stat
+  statRewards?: Partial<Record<StatName, number>>; // 0 to 3 XP per stat
+  frequency?: 'everyday' | 'specific_days';
+  daysOfWeek?: string[]; // e.g. ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+  timesPerDay?: number; // 1, 2, or 3
+  timesCompletedToday?: number;
+  reminderTime?: string | null; // e.g. '09:00 AM'
+  reminderEnabled?: boolean;
+  createdAt?: string;
 }
+
+export interface CreateTaskInput {
+  title: string;
+  type: 'task' | 'habit';
+  statRewards: Partial<Record<StatName, number>>;
+  frequency?: 'everyday' | 'specific_days';
+  daysOfWeek?: string[];
+  timesPerDay?: number;
+  reminderTime?: string | null;
+  reminderEnabled?: boolean;
+}
+
 
 export interface LogEntry {
   day: number;

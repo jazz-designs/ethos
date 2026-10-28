@@ -126,7 +126,7 @@ export const HeroStatsSection: React.FC<HeroStatsSectionProps> = ({
                     </Text>
                     <View style={styles.percentRow}>
                       <Text style={styles.percentText}>
-                        {actualPercent}%
+                        {statData.xp} xp
                       </Text>
                       {delta !== undefined && delta !== 0 && (
                         <Text

@@ -11,6 +11,7 @@ import {
   Platform,
   Keyboard,
   Modal,
+  AppState as RNAppState,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -19,6 +20,7 @@ import { Theme } from '../theme';
 import {
   AppState,
   CharacterType,
+  CreateTaskInput,
   LevelUpEvent,
   LogEntry,
   MoodType,
@@ -35,7 +37,7 @@ import { ProgressScreen } from '../components/ProgressScreen';
 import { ChroniclesScreen } from '../components/ChroniclesScreen';
 import { HeroScreen } from '../components/HeroScreen';
 import { FloatingDock } from '../components/FloatingDock';
-import { applyXp, deriveState, STAT_NAMES } from '../game';
+import { adjustStatXp, applyXp, deriveState, getTaskStatRewards, STAT_NAMES } from '../game';
 import { loadLocalState, resetLocalState, saveLocalState } from '../storage';
 
 export default function HomeScreen() {
@@ -51,7 +53,7 @@ export default function HomeScreen() {
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [isProfileModalVisible, setIsProfileModalVisible] = useState(false);
 
-  const scrollViewRef = useRef<ScrollView>(null);
+  const scrollViewRef = useRef<any>(null);
 
   // Keyboard visibility & exact height listener
   useEffect(() => {
@@ -81,8 +83,20 @@ export default function HomeScreen() {
     };
   }, []);
 
-  // ── Load Local State on Launch ───────────────────────────────────────
+  // ── Wake up sleeping server on app open ──────────────────────────────
+  const pingServer = async (): Promise<boolean> => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/ping`);
+      const data = await res.json();
+      return data?.ok === true;
+    } catch {
+      return false;
+    }
+  };
+
+  // ── Load Local State & Ping Server on Launch ─────────────────────────
   useEffect(() => {
+    pingServer(); // wakes server immediately
     async function init() {
       try {
         const local = await loadLocalState();
@@ -152,13 +166,132 @@ export default function HomeScreen() {
     }
   };
 
-  // ── Task Completion Toggle ───────────────────────────────────────────
+  // ── Task Completion Toggle (Applies XP to Stats) ──────────────────────
   const handleToggleTask = async (taskId: string) => {
     if (!state) return;
     const currentTasks = state.tasks || [];
+    const task = currentTasks.find((t) => t.id === taskId);
+    if (!task) return;
+
+    const rewards = getTaskStatRewards(task);
+    const isHabit = task.type === 'habit';
+    const targetCount = task.timesPerDay || 1;
+    const currentCount = task.timesCompletedToday || (task.completed ? targetCount : 0);
+
+    let nextCompleted = task.completed;
+    let nextCount = currentCount;
+    let xpMultiplier = 0; // positive for gaining XP, negative for losing XP
+
+    if (isHabit && targetCount > 1) {
+      if (currentCount < targetCount) {
+        nextCount = currentCount + 1;
+        nextCompleted = nextCount >= targetCount;
+        xpMultiplier = 1;
+      } else {
+        // Uncheck / reset from completed to 0
+        nextCount = 0;
+        nextCompleted = false;
+        xpMultiplier = -targetCount;
+      }
+    } else {
+      if (!task.completed) {
+        nextCompleted = true;
+        nextCount = 1;
+        xpMultiplier = 1;
+      } else {
+        nextCompleted = false;
+        nextCount = 0;
+        xpMultiplier = -1;
+      }
+    }
+
     const updatedTasks = currentTasks.map((t) =>
-      t.id === taskId ? { ...t, completed: !t.completed } : t
+      t.id === taskId
+        ? {
+            ...t,
+            completed: nextCompleted,
+            timesCompletedToday: nextCount,
+          }
+        : t
     );
+
+    // Apply XP delta to stats
+    const updatedStats = { ...state.stats };
+    if (xpMultiplier !== 0) {
+      Object.entries(rewards).forEach(([statKey, rewardXp]) => {
+        const statName = statKey as StatName;
+        const cur = updatedStats[statName] || { level: 1, xp: 0 };
+        const delta = (rewardXp || 0) * xpMultiplier;
+        const res = adjustStatXp(cur.level, cur.xp, delta);
+        updatedStats[statName] = {
+          level: res.level,
+          xp: res.xp,
+        };
+      });
+    }
+
+    const nextState = deriveState({
+      ...state,
+      stats: updatedStats,
+      tasks: updatedTasks,
+    });
+
+    setState(nextState);
+    try {
+      await saveLocalState(nextState);
+    } catch (err) {
+      console.warn('Could not persist task update:', err);
+    }
+  };
+
+  // ── Add New Task or Habit ─────────────────────────────────────────────
+  const handleAddTask = async (params: CreateTaskInput) => {
+    if (!state || !params.title.trim()) return;
+    const currentTasks = state.tasks || [];
+    const newTask: TaskItem = {
+      id: Date.now().toString(),
+      title: params.title.trim(),
+      completed: false,
+      type: params.type,
+      statRewards: params.statRewards,
+      frequency: params.frequency,
+      daysOfWeek: params.daysOfWeek,
+      timesPerDay: params.timesPerDay || 1,
+      timesCompletedToday: 0,
+      reminderTime: params.reminderTime,
+      reminderEnabled: params.reminderEnabled,
+      createdAt: new Date().toISOString(),
+    };
+    const nextState = deriveState({
+      ...state,
+      tasks: [...currentTasks, newTask],
+    });
+    setState(nextState);
+    try {
+      await saveLocalState(nextState);
+    } catch (err) {
+      console.warn('Could not persist new task:', err);
+    }
+  };
+
+  // ── Update Existing Task or Habit ─────────────────────────────────────
+  const handleUpdateTask = async (taskId: string, params: CreateTaskInput) => {
+    if (!state || !params.title.trim()) return;
+    const currentTasks = state.tasks || [];
+    const updatedTasks = currentTasks.map((t) => {
+      if (t.id !== taskId) return t;
+      return {
+        ...t,
+        title: params.title.trim(),
+        type: params.type,
+        statRewards: params.statRewards,
+        frequency: params.frequency,
+        daysOfWeek: params.daysOfWeek,
+        timesPerDay: params.timesPerDay || 1,
+        reminderTime: params.reminderTime,
+        reminderEnabled: params.reminderEnabled,
+      };
+    });
     const nextState = deriveState({
       ...state,
       tasks: updatedTasks,
@@ -171,24 +304,20 @@ export default function HomeScreen() {
     }
   };
 
-  // ── Add New Task ─────────────────────────────────────────────────────
-  const handleAddTask = async (title: string) => {
-    if (!state || !title.trim()) return;
+  // ── Delete Task or Habit ──────────────────────────────────────────────
+  const handleDeleteTask = async (taskId: string) => {
+    if (!state) return;
     const currentTasks = state.tasks || [];
-    const newTask: TaskItem = {
-      id: Date.now().toString(),
-      title: title.trim(),
-      completed: false,
-    };
+    const updatedTasks = currentTasks.filter((t) => t.id !== taskId);
     const nextState = deriveState({
       ...state,
-      tasks: [...currentTasks, newTask],
+      tasks: updatedTasks,
     });
     setState(nextState);
     try {
       await saveLocalState(nextState);
     } catch (err) {
-      console.warn('Could not persist new task:', err);
+      console.warn('Could not persist task deletion:', err);
     }
   };
 
@@ -289,13 +418,19 @@ export default function HomeScreen() {
     setError(null);
     try {
       const nextDay = state.currentDay + 1;
-      // Delete finished tasks on day transition; carry over only unfinished tasks
-      const remainingTasks = (state.tasks || []).filter((t) => !t.completed);
+      // Habits carry over and reset for the new day; completed one-time tasks are removed; unfinished one-time tasks carry over
+      const nextTasks = (state.tasks || [])
+        .filter((t) => t.type === 'habit' || !t.completed)
+        .map((t) =>
+          t.type === 'habit'
+            ? { ...t, completed: false, timesCompletedToday: 0 }
+            : t
+        );
       const nextState = deriveState({
         ...state,
         currentDay: nextDay,
         currentMood: null,
-        tasks: remainingTasks,
+        tasks: nextTasks,
       });
 
       await saveLocalState(nextState);
@@ -457,6 +592,8 @@ export default function HomeScreen() {
             tasks={state.tasks || []}
             onToggleTask={handleToggleTask}
             onAddTask={handleAddTask}
+            onUpdateTask={handleUpdateTask}
+            onDeleteTask={handleDeleteTask}
             onPressProfile={() => setIsProfileModalVisible(true)}
           />
         )}

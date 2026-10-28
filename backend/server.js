@@ -298,6 +298,11 @@ async function generateCharacterImage(activityScene, characterKey) {
 
 // ── Endpoints ───────────────────────────────────────────────────────────
 
+// Ping / Wakeup endpoint
+app.get('/api/ping', (_req, res) => {
+  res.json({ ok: true });
+});
+
 // Health check endpoint
 app.get('/api/health', (_req, res) => {
   res.json({

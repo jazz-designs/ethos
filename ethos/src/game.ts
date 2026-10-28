@@ -58,6 +58,52 @@ export function applyXp(
 }
 
 /**
+ * Add or subtract XP to/from a stat, adjusting level and XP properly.
+ * XP cannot drop below 0 at level 1. Levels never drop below 1.
+ */
+export function adjustStatXp(
+  currentLevel: number,
+  currentXp: number,
+  deltaXp: number
+): { level: number; xp: number; leveledUp: boolean } {
+  let level = Math.max(1, currentLevel);
+  let xp = currentXp + deltaXp;
+  let leveledUp = false;
+
+  if (deltaXp >= 0) {
+    while (xp >= xpNeeded(level)) {
+      xp -= xpNeeded(level);
+      level += 1;
+      leveledUp = true;
+    }
+  } else {
+    while (xp < 0 && level > 1) {
+      level -= 1;
+      xp += xpNeeded(level);
+    }
+    if (xp < 0) {
+      xp = 0;
+    }
+  }
+
+  return { level, xp, leveledUp };
+}
+
+/**
+ * Normalizes stat rewards for a task item.
+ * Supports legacy single statReward or multiple statRewards (max 3 XP per stat).
+ */
+export function getTaskStatRewards(task: TaskItem): Partial<Record<StatName, number>> {
+  if (task.statRewards && Object.keys(task.statRewards).length > 0) {
+    return task.statRewards;
+  }
+  if (task.statReward) {
+    return { [task.statReward]: 2 };
+  }
+  return {};
+}
+
+/**
  * Character overall level = floor(average of the 4 stat levels).
  */
 export function characterLevel(stats: Record<StatName, StatData>): number {
@@ -280,14 +326,70 @@ export function createTwoWeekDemoState(): AppState {
     currentMood: null,
     selectedCharacter: 'ch_1',
     tasks: [
-      { id: '1', title: 'Prepare for exam', completed: false, statReward: 'intelligence' },
-      { id: '2', title: 'Wash the dishes', completed: false, statReward: 'health' },
-      { id: '3', title: 'Complete the app', completed: false, statReward: 'intelligence' },
-      { id: '4', title: 'Learn Japanese', completed: false, statReward: 'intelligence' },
-      { id: '5', title: 'Website', completed: true, statReward: 'intelligence' },
-      { id: '6', title: 'Clean', completed: false, statReward: 'health' },
-      { id: '7', title: 'Haircut', completed: true, statReward: 'mental_health' },
-      { id: '8', title: 'School', completed: true, statReward: 'intelligence' },
+      {
+        id: '1',
+        title: 'Prepare for exam',
+        completed: false,
+        type: 'task',
+        statRewards: { intelligence: 3 },
+      },
+      {
+        id: '2',
+        title: 'Morning stretch & cardio',
+        completed: false,
+        type: 'habit',
+        frequency: 'everyday',
+        timesPerDay: 1,
+        statRewards: { physique: 2, health: 1 },
+        reminderTime: '08:00 AM',
+        reminderEnabled: true,
+      },
+      {
+        id: '3',
+        title: 'Hydrate (8 glasses)',
+        completed: false,
+        type: 'habit',
+        frequency: 'everyday',
+        timesPerDay: 3,
+        timesCompletedToday: 1,
+        statRewards: { health: 1 },
+      },
+      {
+        id: '4',
+        title: 'Learn Japanese',
+        completed: false,
+        type: 'task',
+        statRewards: { intelligence: 2 },
+      },
+      {
+        id: '5',
+        title: 'Mindfulness & Meditation',
+        completed: true,
+        type: 'habit',
+        frequency: 'everyday',
+        timesPerDay: 1,
+        timesCompletedToday: 1,
+        statRewards: { mental_health: 3 },
+        reminderTime: '09:00 PM',
+        reminderEnabled: true,
+      },
+      {
+        id: '6',
+        title: 'Wash the dishes',
+        completed: false,
+        type: 'task',
+        statRewards: { health: 1 },
+      },
+      {
+        id: '7',
+        title: 'Gym workout',
+        completed: false,
+        type: 'habit',
+        frequency: 'specific_days',
+        daysOfWeek: ['Mon', 'Wed', 'Fri'],
+        timesPerDay: 1,
+        statRewards: { physique: 3 },
+      },
     ],
   };
 }
@@ -344,12 +446,25 @@ export function deriveState(raw: Partial<AppState>): AppState {
 
   const selectedChar = (raw.selectedCharacter as CharacterType) || 'ch_1';
 
-  const tasks: TaskItem[] = Array.isArray(raw.tasks) && raw.tasks.length > 0 ? raw.tasks : [
-    { id: '1', title: 'Prepare for exam', completed: false, statReward: 'intelligence' },
-    { id: '2', title: 'Wash the dishes', completed: false, statReward: 'health' },
-    { id: '3', title: 'Complete the app', completed: false, statReward: 'intelligence' },
-    { id: '4', title: 'Learn Japanese', completed: false, statReward: 'intelligence' },
-  ];
+  const rawTasksList = Array.isArray(raw.tasks) && raw.tasks.length > 0
+    ? raw.tasks
+    : [
+        { id: '1', title: 'Prepare for exam', completed: false, type: 'task' as const, statRewards: { intelligence: 3 } },
+        { id: '2', title: 'Morning stretch & cardio', completed: false, type: 'habit' as const, timesPerDay: 1, statRewards: { physique: 2, health: 1 } },
+        { id: '3', title: 'Complete the app', completed: false, type: 'task' as const, statRewards: { intelligence: 3 } },
+        { id: '4', title: 'Mindfulness session', completed: false, type: 'habit' as const, timesPerDay: 1, statRewards: { mental_health: 2 } },
+      ];
+
+  const tasks: TaskItem[] = rawTasksList.map((t) => {
+    const rewards = getTaskStatRewards(t);
+    return {
+      ...t,
+      type: t.type || 'task',
+      statRewards: rewards,
+      timesPerDay: t.timesPerDay || 1,
+      timesCompletedToday: t.timesCompletedToday ?? (t.completed ? (t.timesPerDay || 1) : 0),
+    };
+  });
 
   return {
     currentDay,
